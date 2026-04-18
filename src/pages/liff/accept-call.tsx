@@ -24,7 +24,7 @@ export default function AcceptCallPage() {
         const initializeLiff = async () => {
             try {
                 const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-                
+
                 if (!liffId) {
                     throw new Error('ไม่พบ LIFF ID ในการตั้งค่า');
                 }
@@ -32,7 +32,7 @@ export default function AcceptCallPage() {
                 // โหลด LIFF SDK
                 setStatus('กำลังเชื่อมต่อกับ LINE...');
                 const liff = (await import('@line/liff')).default;
-                
+
                 // เริ่มต้น LIFF
                 await liff.init({ liffId });
 
@@ -54,22 +54,27 @@ export default function AcceptCallPage() {
                 };
 
                 // Validate parameters
-                if (!params.extenId || !params.takecareId || !params.userLineId || 
+                if (!params.extenId || !params.takecareId || !params.userLineId ||
                     !params.groupId || !params.tel) {
                     throw new Error('ข้อมูลไม่ครบถ้วน กรุณาลองใหม่อีกครั้ง');
                 }
 
                 setTelNumber(params.tel);
 
-                // ดึงข้อมูลผู้ใช้
-                const profile = await liff.getProfile();
+                // ✅ 1. ดึง ID Token จาก LIFF แทนการดึง Profile ธรรมดา
+                const idToken = liff.getIDToken();
+                if (!idToken) {
+                    throw new Error('ไม่สามารถดึงข้อมูลยืนยันตัวตนได้ กรุณาเข้าสู่ระบบใหม่');
+                }
+
                 setStatus('กำลังรับเคส...');
 
-                // เรียก API เพื่อรับเคส
+                // ✅ 2. เรียก API เพื่อรับเคส พร้อมแนบ ID Token ไปใน Header
                 const response = await fetch('/api/accept-call', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json' 
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}` // แนบ Token ตรงนี้
                     },
                     body: JSON.stringify({
                         extenId: params.extenId,
@@ -77,7 +82,7 @@ export default function AcceptCallPage() {
                         userLineId: params.userLineId,
                         groupId: params.groupId,
                         tel: params.tel,
-                        operatorLineId: profile.userId,
+                        // ❌ ลบ operatorLineId ออก เพราะหลังบ้านไม่ใช้แล้ว (ไปแกะเอาจาก Token แทน)
                     }),
                 });
 
@@ -88,7 +93,7 @@ export default function AcceptCallPage() {
                 }
 
                 setStatus('เปิดแอปโทรศัพท์...');
-                
+
                 // เปิดแอปโทรศัพท์
                 setTimeout(() => {
                     window.location.href = `tel:${params.tel}`;
@@ -109,7 +114,7 @@ export default function AcceptCallPage() {
         <div style={styles.container}>
             <div style={styles.card}>
                 <h1 style={styles.title}>รับเคสและโทร</h1>
-                
+
                 <div style={styles.statusSection}>
                     {error ? (
                         <>
@@ -129,8 +134,8 @@ export default function AcceptCallPage() {
                         <p style={styles.instructionText}>
                             หากไม่มีการเปิดแอปโทรศัพท์อัตโนมัติ
                         </p>
-                        <a 
-                            href={`tel:${telNumber}`} 
+                        <a
+                            href={`tel:${telNumber}`}
                             style={styles.callButton}
                             onClick={() => setStatus('กำลังเปิดแอปโทรศัพท์...')}
                         >
