@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
         // 2. นำ ID Token ไป Verify กับเซิร์ฟเวอร์ของ LINE 
         const verifyParams = new URLSearchParams();
         verifyParams.append('id_token', idToken);
-        verifyParams.append('client_id', process.env.LINE_CLIENT_ID || 'ใส่_CHANNEL_ID_ของ_LINE_LOGIN_ที่นี่');
+        verifyParams.append('client_id', process.env.LINE_LOGIN_CHANNEL_ID || 'ใส่_CHANNEL_ID_ของ_LINE_LOGIN_ที่นี่');
 
         const verifyResponse = await fetch('https://api.line.me/oauth2/v2.1/verify', {
             method: 'POST',
