@@ -43,6 +43,8 @@ export default function AcceptCallPage() {
                     return;
                 }
 
+                console.log('ID Token:', liff.getIDToken());
+
                 // ดึง URL parameters
                 const urlParams = new URLSearchParams(window.location.search);
                 const params: QueryParams = {
@@ -66,6 +68,7 @@ export default function AcceptCallPage() {
                 if (!idToken) {
                     throw new Error('ไม่สามารถดึงข้อมูลยืนยันตัวตนได้ กรุณาเข้าสู่ระบบใหม่');
                 }
+                console.log('ID Token:', idToken);
 
                 setStatus('กำลังรับเคส...');
 
