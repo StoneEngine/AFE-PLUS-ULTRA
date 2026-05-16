@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
+import { withUserContext } from '@/lib/withUserContext';
 import _ from 'lodash';
 import { replyNotificationPostback ,replyNotificationPostbackfall} from '@/utils/apiLineReply';
 import axios from 'axios';
@@ -42,51 +43,90 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse<D
                 return res.status(400).json({ message: 'error', data: 'users_id, takecare_id, fall_status ต้องเป็นตัวเลข' });
             }
 
-            const user = await prisma.users.findFirst({
-                where: { users_id: Number(body.users_id) }
+            const userId = Number(body.users_id);
+            const takecareId = Number(body.takecare_id);
+            const fallStatus = Number(body.fall_status);
+
+            const ctxResult = await withUserContext(userId, async (tx) => {
+                const user = await tx.users.findFirst({
+                    where: { users_id: userId }
+                });
+
+                const takecareperson = await tx.takecareperson.findFirst({
+                    where: { takecare_id: takecareId, takecare_status: 1 }
+                });
+
+                if (!user || !takecareperson) {
+                    return { ok: false as const, reason: 'ไม่พบข้อมูล user หรือ takecareperson' };
+                }
+
+                const lastFall = await tx.fall_records.findFirst({
+                    where: {
+                        users_id: user.users_id,
+                        takecare_id: takecareperson.takecare_id
+                    },
+                    orderBy: { noti_time: 'desc' }
+                });
+
+                let noti_time: Date | null = null;
+                let noti_status: number | null = null;
+                let shouldNotify = false;
+                let notifyMessage = '';
+
+                if ((fallStatus === 2 || fallStatus === 3) && (
+                    !lastFall || lastFall.noti_status !== 1 || !lastFall.noti_time || moment().diff(moment(lastFall.noti_time), 'minutes') >= 5
+                )) {
+                    shouldNotify = true;
+                    notifyMessage = fallStatus === 2
+                        ? `คุณ ${takecareperson.takecare_fname} ${takecareperson.takecare_sname} กด "ไม่โอเค" ขอความช่วยเหลือ`
+                        : `คุณ ${takecareperson.takecare_fname} ${takecareperson.takecare_sname} ไม่มีการตอบสนองภายใน 30 วินาที`;
+                    noti_status = 1;
+                    noti_time = new Date();
+                } else {
+                    noti_status = 0;
+                    noti_time = null;
+                }
+
+                await tx.fall_records.create({
+                    data: {
+                        users_id: user.users_id,
+                        takecare_id: takecareperson.takecare_id,
+                        x_axis: Number(body.x_axis),
+                        y_axis: Number(body.y_axis),
+                        z_axis: Number(body.z_axis),
+                        fall_latitude: body.latitude,
+                        fall_longitude: body.longitude,
+                        fall_status: fallStatus,
+                        noti_time: noti_time,
+                        noti_status: noti_status
+                    }
+                });
+
+                return {
+                    ok: true as const,
+                    user,
+                    takecareperson,
+                    shouldNotify,
+                    notifyMessage
+                };
             });
 
-            const takecareperson = await prisma.takecareperson.findFirst({
-                where: { takecare_id: Number(body.takecare_id), takecare_status: 1 }
-            });
-
-            if (!user || !takecareperson) {
-                return res.status(200).json({ message: 'error', data: 'ไม่พบข้อมูล user หรือ takecareperson' });
+            if (!ctxResult.ok) {
+                return res.status(200).json({ message: 'error', data: ctxResult.reason });
             }
 
-         
-            const lastFall = await prisma.fall_records.findFirst({
-                where: {
-                    users_id: user.users_id,
-                    takecare_id: takecareperson.takecare_id
-                },
-                orderBy: { noti_time: 'desc' }
-            });
-
-            const fallStatus = Number(body.fall_status);
-            let noti_time: Date | null = null;
-            let noti_status: number | null = null;
-
-           
-            if ((fallStatus === 2 || fallStatus === 3) && (
-                !lastFall || lastFall.noti_status !== 1 || !lastFall.noti_time || moment().diff(moment(lastFall.noti_time), 'minutes') >= 5
-            )) {
-                const message = fallStatus === 2
-                    ? `คุณ ${takecareperson.takecare_fname} ${takecareperson.takecare_sname} กด "ไม่โอเค" ขอความช่วยเหลือ`
-                    : `คุณ ${takecareperson.takecare_fname} ${takecareperson.takecare_sname} ไม่มีการตอบสนองภายใน 30 วินาที`;
-
+            if (ctxResult.shouldNotify) {
+                const { user, takecareperson, notifyMessage } = ctxResult;
                 const replyToken = user.users_line_id || '';
                 if (replyToken) {
-          
                     await replyNotificationPostbackfall({
                         replyToken,
                         userId: user.users_id,
                         takecarepersonId: takecareperson.takecare_id,
                         type: 'fall',
-                        message
+                        message: notifyMessage
                     });
 
-                   
                     const latitude = Number(body.latitude);
                     const longitude = Number(body.longitude);
 
@@ -104,30 +144,9 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse<D
                     };
                     await axios.post(LINE_PUSH_MESSAGING_API, locationRequest, { headers: LINE_HEADER });
                 }
-
-                noti_status = 1;
-                noti_time = new Date();
             } else {
-                noti_status = 0;
-                noti_time = null;
                 console.log("ล้มแต่ยังไม่เข้าเงื่อนไขแจ้งเตือน LINE หรือแจ้งไปแล้วใน 5 นาที");
             }
-
-          
-            await prisma.fall_records.create({
-                data: {
-                    users_id: user.users_id,
-                    takecare_id: takecareperson.takecare_id,
-                    x_axis: Number(body.x_axis),
-                    y_axis: Number(body.y_axis),
-                    z_axis: Number(body.z_axis),
-                    fall_latitude: body.latitude,
-                    fall_longitude: body.longitude,
-                    fall_status: fallStatus,
-                    noti_time: noti_time,
-                    noti_status: noti_status
-                }
-            });
 
             return res.status(200).json({ message: 'success', data: 'บันทึกข้อมูลเรียบร้อย' });
 
