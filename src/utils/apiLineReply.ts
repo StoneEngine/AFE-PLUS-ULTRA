@@ -1,6 +1,7 @@
 ﻿import axios from 'axios';
 import moment from 'moment';
 import prisma from '@/lib/prisma';
+import { withUserContext } from '@/lib/withUserContext';
 const WEB_API = process.env.WEB_API_URL;
 const LINE_MESSAGING_API = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
@@ -829,18 +830,20 @@ export const replyLocation = async ({
         const userIdNum = Number(userData.users_id);
         const takecareIdNum = Number(userTakecarepersonData.takecare_id);
 
-        const [lastTemp, lastHR] = await Promise.all([
-            prisma.temperature_records.findFirst({
-                where: { users_id: userIdNum, takecare_id: takecareIdNum },
-                orderBy: { record_date: 'desc' },
-                select: { temperature_value: true, status: true }
-            }),
-            prisma.heartrate_records.findFirst({
-                where: { users_id: userIdNum, takecare_id: takecareIdNum },
-                orderBy: { record_date: 'desc' },
-                select: { bpm: true, status: true }
-            })
-        ]);
+        const [lastTemp, lastHR] = await withUserContext(userIdNum, async (tx) => {
+            return Promise.all([
+                tx.temperature_records.findFirst({
+                    where: { users_id: userIdNum, takecare_id: takecareIdNum },
+                    orderBy: { record_date: 'desc' },
+                    select: { temperature_value: true, status: true }
+                }),
+                tx.heartrate_records.findFirst({
+                    where: { users_id: userIdNum, takecare_id: takecareIdNum },
+                    orderBy: { record_date: 'desc' },
+                    select: { bpm: true, status: true }
+                })
+            ]);
+        });
 
         const tempVal = lastTemp ? Number(lastTemp.temperature_value).toFixed(1) : '—';
         const hrVal = lastHR ? String(Number(lastHR.bpm)) : '—';
