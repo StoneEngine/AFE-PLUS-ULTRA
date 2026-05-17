@@ -34,16 +34,22 @@ export const replyMapCoordinates = async ({
             return;
         }
 
-        // fetch takecareperson and latest location
-        const takecare = await prisma.takecareperson.findUnique({ where: { takecare_id: targetTakecareId } });
-        const takecareLoc = await prisma.location.findFirst({
-            where: { takecare_id: targetTakecareId },
-            orderBy: { locat_timestamp: 'desc' }
-        });
-
-        // fetch caregiver user by line id and their latest location (if any)
+        // หา caregiver จาก line id ก่อน เพื่อใช้ users_id เป็น RLS context
         const caregiverUser = await prisma.users.findFirst({ where: { users_line_id: toLineId } });
-        const caregiverLoc = caregiverUser ? await prisma.location.findFirst({ where: { users_id: caregiverUser.users_id }, orderBy: { locat_timestamp: 'desc' } }) : null;
+        const caregiverUserId = caregiverUser?.users_id ?? 0;
+
+        const { takecare, takecareLoc, caregiverLoc } = await withUserContext(caregiverUserId, async (tx) => {
+            const takecare = await tx.takecareperson.findUnique({ where: { takecare_id: targetTakecareId } });
+            const takecareLoc = await tx.location.findFirst({
+                where: { takecare_id: targetTakecareId },
+                orderBy: { locat_timestamp: 'desc' }
+            });
+            const caregiverLoc = caregiverUser ? await tx.location.findFirst({
+                where: { users_id: caregiverUser.users_id },
+                orderBy: { locat_timestamp: 'desc' }
+            }) : null;
+            return { takecare, takecareLoc, caregiverLoc };
+        });
 
         const messages: any[] = [];
 
@@ -1427,10 +1433,12 @@ export const replyNotificationPostback = async ({
          // ดึงพิกัดล่าสุดของผู้ที่มีภาวะพึ่งพิง (ถ้ามี) และแนบเป็นข้อความประเภท location
         let preMessages: any[] = [];
         try {
-            const takecareLoc = await prisma.location.findFirst({
-                where: { takecare_id: Number(takecarepersonId) },
-                orderBy: { locat_timestamp: 'desc' }
-            });
+            const takecareLoc = await withUserContext(Number(userId), async (tx) =>
+                tx.location.findFirst({
+                    where: { takecare_id: Number(takecarepersonId) },
+                    orderBy: { locat_timestamp: 'desc' }
+                })
+            );
 
             if (takecareLoc) {
                 preMessages.push({

@@ -181,6 +181,7 @@ const Puserinfo = () => {
         try {
 
             const data = {
+                users_id         : dataUser.users_id,
                 takecare_fname   : formData.takecare_fname,
                 takecare_sname   : formData.takecare_sname,
                 takecare_birthday: formData.takecare_birthday,

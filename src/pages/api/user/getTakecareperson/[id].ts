@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { NextResponse } from 'next/server'
 import axios from "axios";
 import prisma from '@/lib/prisma'
+import { withUserContext } from '@/lib/withUserContext'
 import { decrypt } from '@/utils/helpers'
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
@@ -18,24 +19,30 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
                 return res.status(400).json({ message: 'Invalid ID format', data: null });
             }
 
-            // ค้นหา `takecareperson` โดยใช้ `takecare_id` หรือ `users_id`
-            const response = await prisma.takecareperson.findFirst({
-                where: {
-                    OR: [
-                        { takecare_id: takecarepersonId },
-                        { users_id: takecarepersonId },
-                    ],
-                    takecare_status: 1,
-                },
-                include: {
-                    gender_id_ref: {
-                        select: { gender_describe: true },
+            // RLS context: ใช้ users_id จาก query ถ้ามี (caller ที่รู้ users_id ส่งมา)
+            // ถ้าไม่มี → ใช้ id เป็น fallback (กรณี id เป็น users_id อยู่แล้ว)
+            const usersIdQuery = req.query.users_id;
+            const usersIdNum = usersIdQuery ? parseInt(String(usersIdQuery), 10) : takecarepersonId;
+
+            const response = await withUserContext(usersIdNum, async (tx) =>
+                tx.takecareperson.findFirst({
+                    where: {
+                        OR: [
+                            { takecare_id: takecarepersonId },
+                            { users_id: takecarepersonId },
+                        ],
+                        takecare_status: 1,
                     },
-                    marry_id_ref: {
-                        select: { marry_describe: true },
+                    include: {
+                        gender_id_ref: {
+                            select: { gender_describe: true },
+                        },
+                        marry_id_ref: {
+                            select: { marry_describe: true },
+                        },
                     },
-                },
-            });
+                })
+            );
 
             if (!response) {
                 return res.status(404).json({ message: 'Data not found', data: null });

@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { NextResponse } from 'next/server'
 import axios from "axios";
 import prisma from '@/lib/prisma'
+import { withUserContext } from '@/lib/withUserContext'
 import _ from "lodash";
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
@@ -14,22 +15,25 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
             if(_.isNaN(Number(takecare_id)) || _.isNaN(Number(users_id))){
                 return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ takecare_id หรือ users_id ไม่ใช่ตัวเลข' })
             }
-            let safezone = null
-            if(id){
-                safezone = await prisma.safezone.findFirst({
+
+            const userIdNum = Number(users_id);
+            const takecareIdNum = Number(takecare_id);
+
+            const safezone = await withUserContext(userIdNum, async (tx) => {
+                if (id) {
+                    return tx.safezone.findFirst({
+                        where: {
+                            safezone_id: Number(id),
+                        },
+                    });
+                }
+                return tx.safezone.findFirst({
                     where: {
-                        safezone_id: Number(id)
-                    }
-                })
-            }else{
-                safezone = await prisma.safezone.findFirst({
-                    where: {
-                        takecare_id: Number(takecare_id),
-                        users_id: Number(users_id),
-                    }
-                })
-            }
-            
+                        takecare_id: takecareIdNum,
+                        users_id: userIdNum,
+                    },
+                });
+            });
 
             return res.status(200).json({ message: 'success', data: safezone })
         } catch (error) {

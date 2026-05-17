@@ -1,5 +1,6 @@
-﻿import { NextApiRequest, NextApiResponse } from 'next' 
+﻿import { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '@/lib/prisma'
+import { withUserContext } from '@/lib/withUserContext'
 import { replyNotificationSOS } from '@/utils/apiLineReply'
 
 type Data = {
@@ -26,17 +27,21 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
         }
         
         try {
-            const user = await prisma.users.findFirst({
-                where: {
-                    users_id: Number(body.uid)
-                }
-            });
+            const userIdNum = Number(body.uid);
 
-            const takecareperson = await prisma.takecareperson.findFirst({
-                where: {
-                    users_id: user?.users_id,
-                    takecare_status: 1
-                }
+            const { user, takecareperson } = await withUserContext(userIdNum, async (tx) => {
+                const user = await tx.users.findFirst({
+                    where: { users_id: userIdNum }
+                });
+
+                const takecareperson = user ? await tx.takecareperson.findFirst({
+                    where: {
+                        users_id: user.users_id,
+                        takecare_status: 1
+                    }
+                }) : null;
+
+                return { user, takecareperson };
             });
 
             if (user && takecareperson) {

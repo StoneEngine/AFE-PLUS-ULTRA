@@ -2,6 +2,7 @@
 import * as api from "@/lib/listAPI";
 import axios from "axios";
 import prisma from "@/lib/prisma";
+import { withUserContext } from "@/lib/withUserContext";
 
 import { replyNotification, replyNoti } from "@/utils/apiLineGroup";
 
@@ -14,15 +15,17 @@ const getCurrentLocationStatus = async (
     takecare_id: number,
     users_id: number
 ) => {
-    const latestLocation = await prisma.location.findFirst({
-        where: {
-            users_id: Number(users_id),
-            takecare_id: Number(takecare_id),
-        },
-        orderBy: {
-            locat_timestamp: 'desc',
-        },
-    });
+    const latestLocation = await withUserContext(Number(users_id), async (tx) =>
+        tx.location.findFirst({
+            where: {
+                users_id: Number(users_id),
+                takecare_id: Number(takecare_id),
+            },
+            orderBy: {
+                locat_timestamp: 'desc',
+            },
+        })
+    );
 
     return latestLocation ? Number(latestLocation.locat_status) : null;
 };
@@ -60,7 +63,8 @@ export const postbackHeartRate = async ({
     try {
         const resUser = await api.getUser(userLineId);
         const resTakecareperson = await api.getTakecareperson(
-            takecarepersonId.toString()
+            takecarepersonId.toString(),
+            resUser?.users_id
         );
 
         if (resUser && resTakecareperson) {
@@ -138,7 +142,8 @@ export const postbackFall = async ({
     try {
         const resUser = await api.getUser(userLineId);
         const resTakecareperson = await api.getTakecareperson(
-            takecarepersonId.toString()
+            takecarepersonId.toString(),
+            resUser?.users_id
         );
 
         if (resUser && resTakecareperson) {
@@ -217,7 +222,8 @@ export const postbackTemp = async ({
     try {
         const resUser = await api.getUser(userLineId);
         const resTakecareperson = await api.getTakecareperson(
-            takecarepersonId.toString()
+            takecarepersonId.toString(),
+            resUser?.users_id
         );
 
         if (resUser && resTakecareperson) {
@@ -296,7 +302,8 @@ export const postbackSafezone = async ({
     try {
         const resUser = await api.getUser(userLineId);
         const resTakecareperson = await api.getTakecareperson(
-            takecarepersonId.toString()
+            takecarepersonId.toString(),
+            resUser?.users_id
         );
 
         if (resUser && resTakecareperson) {
@@ -450,9 +457,11 @@ export const postbackAccept = async (data: any) => {
                 let dependentFullName = "-";
                 let dependentTel = "-";
 
-                const dependentUser = await prisma.takecareperson.findFirst({
-                    where: { users_id: Number(resExtendedHelp.user_id) },
-                });
+                const dependentUser = await withUserContext(Number(resExtendedHelp.user_id), async (tx) =>
+                    tx.takecareperson.findFirst({
+                        where: { users_id: Number(resExtendedHelp.user_id) },
+                    })
+                );
                 if (dependentUser) {
                     dependentFullName = `${dependentUser.takecare_fname || ""} ${dependentUser.takecare_sname || ""}`.trim() || "-";
                     dependentTel = dependentUser.takecare_tel1 || dependentUser.takecare_tel_home || "-";

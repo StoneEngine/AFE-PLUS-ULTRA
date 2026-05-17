@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { NextResponse } from 'next/server'
 import axios from "axios";
 import prisma from '@/lib/prisma'
+import { withUserContext } from '@/lib/withUserContext'
 
 import { decrypt } from '@/utils/helpers'
 import _ from 'lodash'
@@ -22,30 +23,37 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
                 if(body.safezone_id && _.isNaN(Number(body.safezone_id))){
                     return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ id ไม่ใช่ตัวเลข' })
                 }
+
+                const userIdNum = Number(body.users_id);
+
                 if(body.safezone_id){
-                    await prisma.safezone.update({
-                        where: {
-                            safezone_id: Number(body.safezone_id),
-                        },
-                        data: {
-                            safez_latitude : body.safez_latitude,
-                            safez_longitude: body.safez_longitude,
-                            safez_radiuslv1: Number(body.safez_radiuslv1),
-                            safez_radiuslv2: Number(body.safez_radiuslv2),
-                        },
-                    })
+                    await withUserContext(userIdNum, async (tx) =>
+                        tx.safezone.update({
+                            where: {
+                                safezone_id: Number(body.safezone_id),
+                            },
+                            data: {
+                                safez_latitude : body.safez_latitude,
+                                safez_longitude: body.safez_longitude,
+                                safez_radiuslv1: Number(body.safez_radiuslv1),
+                                safez_radiuslv2: Number(body.safez_radiuslv2),
+                            },
+                        })
+                    );
                     return res.status(200).json({ message: 'success' })
                 }else{
-                  const createdSafezone =  await prisma.safezone.create({
-                        data: {
-                            takecare_id    : Number(body.takecare_id),
-                            users_id       : Number(body.users_id),
-                            safez_latitude : body.safez_latitude,
-                            safez_longitude: body.safez_longitude,
-                            safez_radiuslv1: Number(body.safez_radiuslv1),
-                            safez_radiuslv2: Number(body.safez_radiuslv2),
-                        },
-                    })
+                    const createdSafezone = await withUserContext(userIdNum, async (tx) =>
+                        tx.safezone.create({
+                            data: {
+                                takecare_id    : Number(body.takecare_id),
+                                users_id       : userIdNum,
+                                safez_latitude : body.safez_latitude,
+                                safez_longitude: body.safez_longitude,
+                                safez_radiuslv1: Number(body.safez_radiuslv1),
+                                safez_radiuslv2: Number(body.safez_radiuslv2),
+                            },
+                        })
+                    );
                     return res.status(200).json({ message: 'success', id: createdSafezone.safezone_id })
                 }
             }

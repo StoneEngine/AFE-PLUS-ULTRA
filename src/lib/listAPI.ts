@@ -15,9 +15,10 @@ export const getUser = async (userLineId: string) => {
 	}
 }
 
-export const getTakecareperson = async (takecarepersonId: string) => {
+export const getTakecareperson = async (takecarepersonId: string, usersId?: number) => {
     const enTakecarepersonId = encrypt(takecarepersonId)
-    const url = urlName(`/api/user/getTakecareperson/${enTakecarepersonId}`)
+    const qs = usersId !== undefined ? `?users_id=${usersId}` : ''
+    const url = urlName(`/api/user/getTakecareperson/${enTakecarepersonId}${qs}`)
 	const responseUser = await axios.get(url);
 	if(responseUser.data?.data){
 		return responseUser.data.data
