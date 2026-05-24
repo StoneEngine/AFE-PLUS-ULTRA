@@ -1,6 +1,5 @@
-﻿import { NextApiRequest, NextApiResponse } from 'next'
-import prisma from '@/lib/prisma'
-import { withUserContext } from '@/lib/withUserContext'
+import { NextApiRequest, NextApiResponse } from 'next'
+import { withRls } from '@/lib/withRls'
 import { replyNotificationSOS } from '@/utils/apiLineReply'
 
 type Data = {
@@ -8,60 +7,58 @@ type Data = {
 	data?: any;
 }
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
-	if (req.method === 'POST') {
-        if (req.headers['content-type'] !== 'application/json') {
-            return res.status(400).json({ message: 'error', error: "Content-Type must be application/json" });
-        }
+export default withRls(
+	req => Number(req.body?.uid),
+	async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
+		if (req.method === 'POST') {
+			if (req.headers['content-type'] !== 'application/json') {
+				return res.status(400).json({ message: 'error', error: "Content-Type must be application/json" });
+			}
 
-        const body = req.body;
-        const { uid } = req.body;
-        console.log("📥 Received Request Body:", req.body);
-        console.log("🔍 Checking UID:", uid);
-        if (!body.uid) {
-            return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ uid' });
-        }
-        
-        if (isNaN(Number(body.uid))) {
-            return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uid ไม่ใช่ตัวเลข' });
-        }
-        
-        try {
-            const userIdNum = Number(body.uid);
+			const body = req.body;
+			const { uid } = req.body;
+			console.log("📥 Received Request Body:", req.body);
+			console.log("🔍 Checking UID:", uid);
+			if (!body.uid) {
+				return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ uid' });
+			}
 
-            const { user, takecareperson } = await withUserContext(userIdNum, async (tx) => {
-                const user = await tx.users.findFirst({
-                    where: { users_id: userIdNum }
-                });
+			if (isNaN(Number(body.uid))) {
+				return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uid ไม่ใช่ตัวเลข' });
+			}
 
-                const takecareperson = user ? await tx.takecareperson.findFirst({
-                    where: {
-                        users_id: user.users_id,
-                        takecare_status: 1
-                    }
-                }) : null;
+			try {
+				const user = await prisma.users.findFirst({
+					where: {
+						users_id: Number(body.uid)
+					}
+				});
 
-                return { user, takecareperson };
-            });
+				const takecareperson = await prisma.takecareperson.findFirst({
+					where: {
+						users_id: user?.users_id,
+						takecare_status: 1
+					}
+				});
 
-            if (user && takecareperson) {
-                const message = `⚠️ มีการกด SOS จากภายในจากผู้มีภาวะพึ่งพิง`;
-                
-                // ตรวจสอบว่า users_line_id ไม่เป็น null
-                const replyToken = user.users_line_id || '';
+				if (user && takecareperson) {
+					const message = `⚠️ มีการกด SOS จากภายในจากผู้มีภาวะพึ่งพิง`;
 
-                await replyNotificationSOS({ replyToken, message });
+					const replyToken = user.users_line_id || '';
 
-                return res.status(200).json({ message: 'success', data: user });
-            } else {
-                return res.status(400).json({ message: 'error', data: 'ไม่พบข้อมูล' });
-            }
-        } catch (error) {
-            console.error("Error:", error);
-            return res.status(500).json({ message: 'error', data: 'เกิดข้อผิดพลาดในการประมวลผล' });
-        }
-	} else {
-		res.setHeader('Allow', ['POST']);
-		res.status(405).json({ message: `วิธี ${req.method} ไม่อนุญาต` });
+					await replyNotificationSOS({ replyToken, message });
+
+					return res.status(200).json({ message: 'success', data: user });
+				} else {
+					return res.status(400).json({ message: 'error', data: 'ไม่พบข้อมูล' });
+				}
+			} catch (error) {
+				console.error("Error:", error);
+				return res.status(500).json({ message: 'error', data: 'เกิดข้อผิดพลาดในการประมวลผล' });
+			}
+		} else {
+			res.setHeader('Allow', ['POST']);
+			res.status(405).json({ message: `วิธี ${req.method} ไม่อนุญาต` });
+		}
 	}
-}
+);

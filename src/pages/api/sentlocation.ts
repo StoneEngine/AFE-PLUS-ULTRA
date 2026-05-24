@@ -1,38 +1,33 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '@/lib/prisma';
-import { withUserContext } from '@/lib/withUserContext';
+import { withRls } from '@/lib/withRls';
 import { getFlexTemplate, pushFlexMessage } from '@/utils/apiLineReply';
 import { replySafezoneBackMessage } from '@/utils/apiLineGroup';
 import moment from 'moment';
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
-  // รองรับทั้ง POST และ PUT
-  if (req.method === 'PUT' || req.method === 'POST') {
-    try {
-      const { uId, takecare_id, distance, latitude, longitude, battery } = req.body;
+export default withRls(
+  req => Number(req.body?.uId),
+  async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
+    if (req.method === 'PUT' || req.method === 'POST') {
+      try {
+        const { uId, takecare_id, distance, latitude, longitude, battery } = req.body;
 
-      // ตรวจสอบพารามิเตอร์ (ปล่อยให้ 0 ผ่านได้)
-      if (
-        uId === undefined || takecare_id === undefined ||
-        distance === undefined || latitude === undefined ||
-        longitude === undefined || battery === undefined
-      ) {
-        return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ไม่ครบถ้วน' });
-      }
+        if (
+          uId === undefined || takecare_id === undefined ||
+          distance === undefined || latitude === undefined ||
+          longitude === undefined || battery === undefined
+        ) {
+          return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ไม่ครบถ้วน' });
+        }
 
-      const userIdNum = Number(uId);
-      const takecareIdNum = Number(takecare_id);
-
-      const ctxResult = await withUserContext(userIdNum, async (tx) => {
-        const safezone = await tx.safezone.findFirst({
+        const safezone = await prisma.safezone.findFirst({
           where: {
-            takecare_id: takecareIdNum,
-            users_id: userIdNum,
+            takecare_id: Number(takecare_id),
+            users_id: Number(uId),
           },
         });
 
         if (!safezone) {
-          return { ok: false as const, reason: 'ไม่พบข้อมูล Safezone' };
+          return res.status(404).json({ message: 'error', data: 'ไม่พบข้อมูล Safezone' });
         }
 
         const r1 = safezone.safez_radiuslv1;
@@ -51,17 +46,17 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
           calculatedStatus = 2;
         }
 
-        const latest = await tx.location.findFirst({
+        const latest = await prisma.location.findFirst({
           where: {
-            users_id: userIdNum,
-            takecare_id: takecareIdNum,
+            users_id: Number(uId),
+            takecare_id: Number(takecare_id),
           },
           orderBy: { locat_timestamp: 'desc' },
         });
 
         const dataPayload = {
-          users_id: userIdNum,
-          takecare_id: takecareIdNum,
+          users_id: Number(uId),
+          takecare_id: Number(takecare_id),
           locat_timestamp: new Date(),
           locat_latitude: String(latitude),
           locat_longitude: String(longitude),
@@ -76,141 +71,116 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
         let savedLocation;
         if (latest) {
-          savedLocation = await tx.location.update({
+          savedLocation = await prisma.location.update({
             where: { location_id: latest.location_id },
             data: dataPayload,
           });
         } else {
-          savedLocation = await tx.location.create({ data: dataPayload });
+          savedLocation = await prisma.location.create({ data: dataPayload });
         }
 
-        const user = await tx.users.findFirst({ where: { users_id: userIdNum } });
-        const takecareperson = await tx.takecareperson.findFirst({
+        if (previousStatus !== null && calculatedStatus === previousStatus) {
+          return res.status(200).json({ message: 'success', data: savedLocation });
+        }
+
+        const user = await prisma.users.findFirst({ where: { users_id: Number(uId) } });
+        const takecareperson = await prisma.takecareperson.findFirst({
           where: {
-            users_id: userIdNum,
-            takecare_id: takecareIdNum,
+            users_id: Number(uId),
+            takecare_id: Number(takecare_id),
             takecare_status: 1,
           },
         });
 
-        let activeCaseForFlex = null;
         if (user && takecareperson) {
-          activeCaseForFlex = await tx.extendedhelp.findFirst({
-            where: {
-              user_id: user.users_id,
-              takecare_id: takecareperson.takecare_id,
-              exted_closed_date: null,
-            },
-            orderBy: { exten_date: 'desc' },
-          });
-        }
+          const replyToken = user.users_line_id || '';
 
-        return {
-          ok: true as const,
-          savedLocation,
-          safezone,
-          previousStatus,
-          calculatedStatus,
-          user,
-          takecareperson,
-          activeCaseForFlex,
-        };
-      });
+          if (replyToken) {
+            const activeCaseForFlex = await prisma.extendedhelp.findFirst({
+              where: {
+                user_id: user.users_id,
+                takecare_id: takecareperson.takecare_id,
+                exted_closed_date: null,
+              },
+              orderBy: { exten_date: 'desc' },
+            });
+            const timeText = new Date().toLocaleString('th-TH', {
+              timeZone: 'Asia/Bangkok',
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            const name = `${takecareperson.takecare_fname} ${takecareperson.takecare_sname}`;
+            const postbackData =
+              calculatedStatus === 2
+                ? `userLineId=${replyToken}&takecarepersonId=${Number(takecare_id)}&type=safezone`
+                : undefined;
 
-      if (!ctxResult.ok) {
-        return res.status(404).json({ message: 'error', data: ctxResult.reason });
-      }
+            const contents = getFlexTemplate(
+              calculatedStatus,
+              name,
+              String(latitude),
+              String(longitude),
+              timeText,
+              postbackData,
+              activeCaseForFlex?.exten_id,
+              safezone,
+              { users_line_id: user.users_line_id || '' }
+            );
 
-      const { savedLocation, safezone, previousStatus, calculatedStatus, user, takecareperson, activeCaseForFlex } = ctxResult;
+            await pushFlexMessage({
+              replyToken,
+              altText: 'แจ้งเตือน Safezone',
+              contents,
+            });
 
-      if (previousStatus !== null && calculatedStatus === previousStatus) {
-        return res.status(200).json({ message: 'success', data: savedLocation });
-      }
-
-      if (user && takecareperson) {
-        const replyToken = user.users_line_id || '';
-
-        if (replyToken) {
-          const timeText = new Date().toLocaleString('th-TH', {
-            timeZone: 'Asia/Bangkok',
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          const name = `${takecareperson.takecare_fname} ${takecareperson.takecare_sname}`;
-          const postbackData =
-            calculatedStatus === 2
-              ? `userLineId=${replyToken}&takecarepersonId=${Number(takecare_id)}&type=safezone`
-              : undefined;
-
-          const contents = getFlexTemplate(
-            calculatedStatus,
-            name,
-            String(latitude),
-            String(longitude),
-            timeText,
-            postbackData,
-            activeCaseForFlex?.exten_id,
-            safezone,
-            { users_line_id: user.users_line_id || '' }
-          );
-
-          await pushFlexMessage({
-            replyToken,
-            altText: 'แจ้งเตือน Safezone',
-            contents,
-          });
-
-          // ส่งข้อความไปยังกลุ่มเมื่อกลับเข้าเขตปลอดภัยและมีเคสช่วยเหลือเปิดอยู่
-          if (calculatedStatus === 0 && previousStatus !== null && previousStatus !== 0) {
-            try {
-              const activeCase = await withUserContext(userIdNum, async (tx) =>
-                tx.extendedhelp.findFirst({
+            if (calculatedStatus === 0 && previousStatus !== null && previousStatus !== 0) {
+              try {
+                const activeCase = await prisma.extendedhelp.findFirst({
                   where: {
                     user_id: user.users_id,
                     takecare_id: takecareperson.takecare_id,
                     exted_closed_date: null,
                   },
                   orderBy: { exten_date: 'desc' },
-                })
-              );
-
-              // ส่งข้อความเฉพาะเมื่อมีเคสเปิดอยู่
-              if (activeCase) {
-                await replySafezoneBackMessage({
-                  resUser: {
-                    users_fname: user.users_fname,
-                    users_sname: user.users_sname,
-                    users_tel1: user.users_tel1 || '0000000000',
-                    users_line_id: user.users_line_id || '',
-                  },
-                  resTakecareperson: {
-                    takecare_fname: takecareperson.takecare_fname,
-                    takecare_sname: takecareperson.takecare_sname,
-                    takecare_tel1: takecareperson.takecare_tel1 || '-',
-                    takecare_id: takecareperson.takecare_id,
-                  },
-                  extenId: activeCase.exten_id,
                 });
-              } else {
-                console.log('ไม่มีเคสเปิดอยู่ - ข้ามการส่งข้อความกลับเข้าเขต');
+
+                if (activeCase) {
+                  await replySafezoneBackMessage({
+                    resUser: {
+                      users_fname: user.users_fname,
+                      users_sname: user.users_sname,
+                      users_tel1: user.users_tel1 || '0000000000',
+                      users_line_id: user.users_line_id || '',
+                    },
+                    resTakecareperson: {
+                      takecare_fname: takecareperson.takecare_fname,
+                      takecare_sname: takecareperson.takecare_sname,
+                      takecare_tel1: takecareperson.takecare_tel1 || '-',
+                      takecare_id: takecareperson.takecare_id,
+                    },
+                    extenId: activeCase.exten_id,
+                  });
+                } else {
+                  console.log('ไม่มีเคสเปิดอยู่ - ข้ามการส่งข้อความกลับเข้าเขต');
+                }
+              } catch (error) {
+                console.error('Error sending safezone back message to group:', error);
               }
-            } catch (error) {
-              console.error('Error sending safezone back message to group:', error);
             }
           }
         }
-      }
 
-      return res.status(200).json({ message: 'success', data: savedLocation });
-    } catch (error) {
-      console.error('Error:', error);
-      return res.status(500).json({ message: 'error', data: 'เกิดข้อผิดพลาดในการประมวลผล' });
+        return res.status(200).json({ message: 'success', data: savedLocation });
+      } catch (error) {
+        console.error('Error:', error);
+        return res.status(500).json({ message: 'error', data: 'เกิดข้อผิดพลาดในการประมวลผล' });
+      }
+    } else {
+      res.setHeader('Allow', ['PUT', 'POST']);
+      return res.status(405).json({ message: `วิธี ${req.method} ไม่อนุญาต` });
     }
-  } else {
-    res.setHeader('Allow', ['PUT', 'POST']);
-    return res.status(405).json({ message: `วิธี ${req.method} ไม่อนุญาต` });
   }
-}
+);
