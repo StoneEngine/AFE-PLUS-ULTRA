@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { withRls } from '@/lib/withRls'
+import { withRlsAuth } from '@/lib/withRlsAuth'
 import { decrypt } from '@/utils/helpers'
 
 type Data = {
@@ -7,23 +7,18 @@ type Data = {
     data?: any;
 }
 
-export default withRls(
-    req => Number(req.body?.users_id),
+export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'POST') {
             try {
                 const id = decrypt(req.query.id as string);
                 if (req.body && id) {
                     const body = req.body
-                    const userId = parseInt(id, 10);
-
-                    if (!body.users_id || isNaN(Number(body.users_id))) {
-                        return res.status(400).json({ message: 'error', data: 'ต้องส่ง users_id ใน body' })
-                    }
+                    const takecareId = parseInt(id, 10);
 
                     await prisma.takecareperson.update({
                         where: {
-                            takecare_id: userId,
+                            takecare_id: takecareId,
                         },
                         data: {
                             takecare_fname: body.takecare_fname,

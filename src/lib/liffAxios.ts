@@ -1,39 +1,31 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import liff from '@line/liff';
 
 /**
- * Axios wrapper ที่แนบ LINE ID Token เป็น Bearer header อัตโนมัติ
- * ใช้สำหรับเรียก API ที่ป้องกันด้วย withRlsAuth จากฝั่ง LIFF
+ * ติดตั้ง axios interceptor — แนบ LINE ID Token (Bearer) ทุก request อัตโนมัติ
  *
- * ใช้:
- *   import { liffAxios } from '@/lib/liffAxios';
- *   await liffAxios.get('/api/setting/getSafezone?...');
- *   await liffAxios.post('/api/setting/saveSafezone', data);
+ * เรียกครั้งเดียวใน _app.tsx (browser-only)
+ * หลังจากนั้น `axios.get/post(...)` ทั่วโปรเจคจะแนบ token ให้เอง
+ *   → frontend ไม่ต้องแก้รายไฟล์ → merge ง่าย
  */
-async function getAuthHeader(): Promise<Record<string, string>> {
-    try {
-        if (!liff.isLoggedIn()) return {};
-        const idToken = liff.getIDToken();
-        if (!idToken) return {};
-        return { Authorization: `Bearer ${idToken}` };
-    } catch {
-        return {};
-    }
-}
+let installed = false;
 
-export const liffAxios = {
-    async get(url: string, config: AxiosRequestConfig = {}) {
-        const authHeader = await getAuthHeader();
-        return axios.get(url, {
-            ...config,
-            headers: { ...(config.headers || {}), ...authHeader },
-        });
-    },
-    async post(url: string, data?: any, config: AxiosRequestConfig = {}) {
-        const authHeader = await getAuthHeader();
-        return axios.post(url, data, {
-            ...config,
-            headers: { ...(config.headers || {}), ...authHeader },
-        });
-    },
-};
+export function setupAxiosAuth() {
+    if (installed) return;
+    if (typeof window === 'undefined') return; // browser-only
+    installed = true;
+
+    axios.interceptors.request.use(async (config) => {
+        try {
+            if (liff.isLoggedIn?.()) {
+                const token = liff.getIDToken();
+                if (token && !config.headers.Authorization) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+            }
+        } catch {
+            // liff ยังไม่ init / ไม่ได้อยู่ใน LIFF — ข้าม
+        }
+        return config;
+    });
+}

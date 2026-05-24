@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/router'
 import axios from 'axios'
-import { liffAxios } from '@/lib/liffAxios'
 import Link from 'next/link'
 
 import { GoogleMap, MarkerF, InfoWindow, Circle, DirectionsRenderer } from '@react-google-maps/api';
@@ -99,7 +98,7 @@ const Location = () => {
 
     const onGetSafezone = async (idSafezone: string, takecareData: any, userData: any) => {
         try {
-            const resSafezone = await liffAxios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecareData.takecare_id}&users_id=${userData.users_id}&id=${idSafezone}`);
+            const resSafezone = await axios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecareData.takecare_id}&users_id=${userData.users_id}&id=${idSafezone}`);
             if (resSafezone.data?.data) {
                 const data = resSafezone.data?.data;
                 setSafezonePos({

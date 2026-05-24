@@ -1,15 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { withRls } from '@/lib/withRls'
+import { withRlsAuth } from '@/lib/withRlsAuth'
 import { decrypt } from '@/utils/helpers'
 
-export default withRls(
-    req => {
-        // ถ้ามี users_id ใน query ใช้ก่อน (caller รู้ users_id)
-        if (req.query?.users_id) return Number(req.query.users_id);
-        // fallback: ใช้ decrypted id (กรณี id เป็น users_id อยู่แล้ว)
-        const id = decrypt(req.query.id as string);
-        return id ? Number(Array.isArray(id) ? id[0] : id) : null;
-    },
+export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'GET') {
             try {

@@ -1,13 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { withRls } from '@/lib/withRls'
+import { withRlsAuth } from '@/lib/withRlsAuth'
 
 type Data = {
     message: string;
     data?: any;
 }
 
-export default withRls(
-    req => Number(req.body?.users_id),
+export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'POST') {
             try {
