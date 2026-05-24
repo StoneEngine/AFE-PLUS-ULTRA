@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { Prisma } from '@prisma/client';
 import basePrisma from './prisma';
 import { verifyLineToken } from './verifyLineToken';
+import { decrypt } from '@/utils/helpers';
 
 type RlsPrisma = Prisma.TransactionClient | typeof basePrisma;
 
@@ -30,7 +31,16 @@ export function withRlsAuth(handler: Handler) {
         if (internalKey && internalKey === process.env.INTERNAL_API_KEY) {
             const fromBody = req.body?.users_id ?? req.body?.uId ?? req.body?.uid;
             const fromQuery = req.query?.users_id ?? req.query?.uId;
-            const raw = fromBody ?? fromQuery;
+            let raw = fromBody ?? fromQuery;
+
+            // fallback: ถ้า id อยู่ใน URL path (encrypted) เช่น /api/user/getUserTakecareperson/[id]
+            if (!raw && req.query?.id && typeof req.query.id === 'string') {
+                try {
+                    const decrypted = decrypt(req.query.id);
+                    if (decrypted) raw = Array.isArray(decrypted) ? decrypted[0] : decrypted;
+                } catch {}
+            }
+
             verifiedUserId = raw ? Number(raw) : null;
         } else {
             // ทาง 2: LINE ID Token (สำหรับ LIFF)
