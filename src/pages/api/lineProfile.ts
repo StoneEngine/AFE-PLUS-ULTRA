@@ -142,7 +142,8 @@ const getTemperature = async (takecare_id: number, users_id: number) => {
         `Fetching settingTemp data for ${takecare_id}, user_id ${users_id}`
     );
     const response = await axios.get(
-        `${process.env.WEB_DOMAIN}/api/setting/getTemperature?takecare_id=${takecare_id}&users_id=${users_id}`
+        `${process.env.WEB_DOMAIN}/api/setting/getTemperature?takecare_id=${takecare_id}&users_id=${users_id}`,
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (response.data?.data) {
         console.log("settingtemp data retrieved ", response.data.data);
@@ -162,7 +163,8 @@ const getHeartRate = async (takecare_id: number, users_id: number) => {
         `Fetching heart rate setting data for takecare_id: ${takecare_id}, users_id: ${users_id}`
     );
     const response = await axios.get(
-        `${process.env.WEB_DOMAIN}/api/setting/getHeartRate?takecare_id=${takecare_id}&users_id=${users_id}`
+        `${process.env.WEB_DOMAIN}/api/setting/getHeartRate?takecare_id=${takecare_id}&users_id=${users_id}`,
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (response.data?.data) {
         console.log("Heart rate setting data retrieved", response.data.data);
