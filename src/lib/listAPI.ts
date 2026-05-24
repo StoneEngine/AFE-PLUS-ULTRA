@@ -29,7 +29,9 @@ export const getTakecareperson = async (takecarepersonId: string, usersId?: numb
 
 export const getSafezone = async (takecare_id: number, users_id: number) => {
     const url = urlName(`/api/setting/getSafezone?takecare_id=${takecare_id}&users_id=${users_id}`)
-	const response = await axios.get(url);
+	const response = await axios.get(url, {
+		headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+	});
 	if(response.data?.data){
 		return response.data.data
 	}else{

@@ -49,7 +49,9 @@ const getUserTakecareperson = async (userId: string) => {
 }
 
 const getSafezone = async (takecare_id: number, users_id: number) => {
-  const response = await axios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecare_id}&users_id=${users_id}`);
+  const response = await axios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecare_id}&users_id=${users_id}`, {
+    headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+  });
   if (response.data?.data) {
     return response.data.data;
   } else {

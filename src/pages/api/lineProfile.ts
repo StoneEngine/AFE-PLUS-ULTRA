@@ -92,7 +92,8 @@ const getSafezone = async (takecare_id: number, users_id: number) => {
         `Fetching safezone data for takecare_id: ${takecare_id}, users_id: ${users_id}`
     ); // ตรวจสอบการดึงข้อมูลเขตปลอดภัย
     const response = await axios.get(
-        `${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecare_id}&users_id=${users_id}`
+        `${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecare_id}&users_id=${users_id}`,
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (response.data?.data) {
         console.log("Safezone data retrieved:", response.data.data); // แสดงข้อมูลเขตปลอดภัย

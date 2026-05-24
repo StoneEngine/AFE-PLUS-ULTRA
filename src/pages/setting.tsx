@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import axios from 'axios'
+import { liffAxios } from '@/lib/liffAxios'
 
 import { GoogleMap, Marker, InfoWindow, DrawingManager, Polygon, Circle } from '@react-google-maps/api';
 import { useGoogleMaps } from '@/providers/GoogleMapsProvider';
@@ -82,7 +83,7 @@ const Setting = () => {
 
     const onGetSafezone = async (idSafezone: string, takecareData : any, userData: any) => {
         try {
-            const resSafezone = await axios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecareData.takecare_id}&users_id=${userData.users_id}&id=${idSafezone}`);
+            const resSafezone = await liffAxios.get(`${process.env.WEB_DOMAIN}/api/setting/getSafezone?takecare_id=${takecareData.takecare_id}&users_id=${userData.users_id}&id=${idSafezone}`);
             if(resSafezone.data?.data){
                 const data = resSafezone.data?.data
                 setLocation({
