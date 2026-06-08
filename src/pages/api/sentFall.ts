@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withRls } from '@/lib/withRls';
+import { withAesDecrypt } from '@/lib/withAesDecrypt';
 import _ from 'lodash';
 import { replyNotificationPostback, replyNotificationPostbackfall } from '@/utils/apiLineReply';
 import axios from 'axios';
@@ -16,7 +17,7 @@ type Data = {
     data?: any;
 };
 
-export default withRls(
+export default withAesDecrypt(withRls(
     req => Number(req.body?.users_id),
     async function handle(req: NextApiRequest, res: NextApiResponse<Data>, prisma) {
         if (req.method === 'PUT' || req.method === 'POST') {
@@ -137,4 +138,4 @@ export default withRls(
             return res.status(405).json({ message: 'error', data: `วิธี ${req.method} ไม่อนุญาต` });
         }
     }
-);
+));

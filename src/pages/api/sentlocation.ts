@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withRls } from '@/lib/withRls';
+import { withAesDecrypt } from '@/lib/withAesDecrypt';
 import { getFlexTemplate, pushFlexMessage } from '@/utils/apiLineReply';
 import { replySafezoneBackMessage } from '@/utils/apiLineGroup';
 import moment from 'moment';
 
-export default withRls(
+export default withAesDecrypt(withRls(
   req => Number(req.body?.uId),
   async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
     if (req.method === 'PUT' || req.method === 'POST') {
@@ -183,4 +184,4 @@ export default withRls(
       return res.status(405).json({ message: `วิธี ${req.method} ไม่อนุญาต` });
     }
   }
-);
+));
