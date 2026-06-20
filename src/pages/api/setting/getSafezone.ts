@@ -1,8 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { withRlsAuth } from '@/lib/withRlsAuth'
+import { withRls } from '@/lib/withRls'
 import _ from "lodash";
 
-export default withRlsAuth(
+export default withRls(
+    req => Number(req.query.users_id),
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'GET') {
             try {
