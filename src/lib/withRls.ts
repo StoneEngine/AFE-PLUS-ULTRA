@@ -28,8 +28,10 @@ export function withRls(getUserId: GetUserId, handler: Handler) {
         const userId = getUserId(req);
 
         if (!userId || isNaN(userId)) {
-            // ไม่มี userId → ใช้ prisma ปกติ (handler ค่อยตรวจและคืน 400 เอง)
-            return handler(req, res, basePrisma);
+            // ไม่มี userId → ตัดจบตรงนี้ ห้ามรันด้วย connection ที่ไม่มี RLS context
+            // (ก่อนหน้านี้ปล่อยผ่านด้วย basePrisma — รอดเพราะ RLS คืน 0 แถว
+            //  แต่ถ้ารันด้วย role ที่เป็นเจ้าของตาราง จะ bypass policy ทั้งหมด)
+            return res.status(401).json({ message: 'error', data: 'Unauthorized: Cannot determine user' });
         }
 
         return basePrisma.$transaction(async (tx) => {
