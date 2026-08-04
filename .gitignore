@@ -35,3 +35,13 @@ yarn-error.log*
 next-env.d.ts
 
 .DS_Store
+
+# LLM personal wiki (local only — never commit)
+CLAUDE.md
+hotcache.md
+index.md
+log.md
+wiki/
+
+# local test output
+scripts/test-results/
