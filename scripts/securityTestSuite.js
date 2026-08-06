@@ -9,7 +9,7 @@
  *   node scripts/securityTestSuite.js 20         # 20 รอบ
  *   TEST_BASE_URL=http://localhost:3000 node scripts/securityTestSuite.js
  *
- * ผลลัพธ์: scripts/test-results/security-YYYYMMDD-HHmmss.{json,md}
+ * ผลลัพธ์: scripts/test-results/ผลทดสอบ-มีเกราะ.{md,json} หรือ ผลทดสอบ-ไม่มีเกราะ.{md,json}
  */
 
 require('dotenv').config();
@@ -56,10 +56,10 @@ async function call(method, urlPath, { headers = {}, body } = {}) {
     return { status: res.status, body: text.slice(0, 300), ms: Date.now() - started };
 }
 
-const sensorPayload = () => ({
-    uId: TEST_USER_ID,
-    takecare_id: TEST_TAKECARE_ID,
-    temperature_value: 36.5,
+const sensorPayload = (i = 1) => ({
+    uId: V(i).users_id,
+    takecare_id: V(i).takecare_id,
+    temperature_value: 36.0 + (i % 10) / 10,   // ค่าต่างกันทุกรอบ
     status: 0,
 });
 
@@ -68,30 +68,53 @@ const sensorPayload = () => ({
 
 // endpoint ที่ห่อด้วย withRlsAuth (ต้อง verify ตัวตนก่อนเข้า)
 // หมายเหตุ: getSafezone ใช้ withRls เฉยๆ ตั้งแต่ commit dc51ad0 — ใช้ทดสอบชั้น 1 ไม่ได้
-const AUTHED = `/api/setting/getTemperature?takecare_id=${TEST_TAKECARE_ID}&users_id=${TEST_USER_ID}`;
+const authedUrl = (i) => `/api/setting/getTemperature?takecare_id=${V(i).takecare_id}&users_id=${V(i).users_id}`;
+
+
+// ค่าที่หมุนเวียนต่อรอบ — แต่ละรอบยิงคนละผู้ใช้/คนละเป้าหมาย
+// ใช้เฉพาะบัญชีทดสอบที่สร้างด้วย scripts/seedTestUsers.js ไม่แตะข้อมูลผู้ใช้จริง
+// ไม่ใช่คำขอเดิมซ้ำ ๆ เพื่อให้ผลลัพธ์ไม่ได้มาจากการยิงชุดเดียวกันซ้ำ
+const VARIANTS = [
+    { users_id: 52, takecare_id: 43, own_safezone: 44, other_safezone: 45, other_users_id: 53 },
+    { users_id: 53, takecare_id: 44, own_safezone: 45, other_safezone: 46, other_users_id: 54 },
+    { users_id: 54, takecare_id: 45, own_safezone: 46, other_safezone: 47, other_users_id: 55 },
+    { users_id: 55, takecare_id: 46, own_safezone: 47, other_safezone: 48, other_users_id: 56 },
+    { users_id: 56, takecare_id: 47, own_safezone: 48, other_safezone: 44, other_users_id: 52 },
+];
+const V = (i) => VARIANTS[(i - 1) % VARIANTS.length];
+
+// token ปลอมคนละแบบในแต่ละรอบ
+const FAKE_TOKENS = [
+    'invalid.token.value',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJVMDAwMCJ9.aaaaaaaaaaaa',
+    'Bearer-looking-but-garbage',
+    '...',
+    'eyJ0eXAiOiJKV1QifQ.e30.',
+];
+const FAKE_KEYS = ['wrong-key-000', 'x-internal-key', '00000000', 'null', 'admin'];
 
 const httpCases = [
     {
         id: 'L1-01', layer: 'ชั้น 1 — LINE token', name: 'ไม่ส่ง Authorization header',
         expect: '401',
-        async run() {
-            const r = await call('GET', AUTHED);
+        async run(i) {
+            const r = await call('GET', authedUrl(i));
             return { ok: r.status === 401, detail: `HTTP ${r.status}`, raw: r };
         },
     },
     {
         id: 'L1-02', layer: 'ชั้น 1 — LINE token', name: 'Bearer token ปลอม',
         expect: '401',
-        async run() {
-            const r = await call('GET', AUTHED, { headers: { Authorization: 'Bearer invalid.token.value' } });
+        async run(i) {
+            const r = await call('GET', authedUrl(i), { headers: { Authorization: `Bearer ${FAKE_TOKENS[(i - 1) % FAKE_TOKENS.length]}` } });
             return { ok: r.status === 401, detail: `HTTP ${r.status}`, raw: r };
         },
     },
     {
         id: 'L1-03', layer: 'ชั้น 1 — LINE token', name: 'x-internal-key ผิด',
         expect: '401',
-        async run() {
-            const r = await call('GET', AUTHED, { headers: { 'x-internal-key': 'wrong-key-000' } });
+        async run(i) {
+            const r = await call('GET', authedUrl(i), { headers: { 'x-internal-key': FAKE_KEYS[(i - 1) % FAKE_KEYS.length] } });
             return { ok: r.status === 401, detail: `HTTP ${r.status}`, raw: r };
         },
     },
@@ -99,25 +122,25 @@ const httpCases = [
         id: 'L1-04', layer: 'ชั้น 1 — LINE token', name: 'x-internal-key ถูกต้อง',
         expect: '200',
         skip: !INTERNAL_KEY && 'ไม่มี INTERNAL_API_KEY ใน .env',
-        async run() {
-            const r = await call('GET', AUTHED, { headers: { 'x-internal-key': INTERNAL_KEY } });
+        async run(i) {
+            const r = await call('GET', authedUrl(i), { headers: { 'x-internal-key': INTERNAL_KEY } });
             return { ok: r.status === 200, detail: `HTTP ${r.status}`, raw: r };
         },
     },
     {
         id: 'L3-01', layer: 'ชั้น 3 — AES-128', name: 'ส่ง plaintext ไม่เข้ารหัส',
         expect: '400',
-        async run() {
-            const r = await call('POST', '/api/sentTemperature', { body: sensorPayload() });
+        async run(i) {
+            const r = await call('POST', '/api/sentTemperature', { body: sensorPayload(i) });
             return { ok: r.status === 400, detail: `HTTP ${r.status}`, raw: r };
         },
     },
     {
         id: 'L3-02', layer: 'ชั้น 3 — AES-128', name: 'เข้ารหัสด้วย key ผิด',
         expect: '400',
-        async run() {
+        async run(i) {
             const wrongKey = crypto.randomBytes(16).toString('hex');
-            const r = await call('POST', '/api/sentTemperature', { body: aesBody(sensorPayload(), wrongKey) });
+            const r = await call('POST', '/api/sentTemperature', { body: aesBody(sensorPayload(i), wrongKey) });
             return { ok: r.status === 400, detail: `HTTP ${r.status}`, raw: r };
         },
     },
@@ -125,8 +148,8 @@ const httpCases = [
         id: 'L3-03', layer: 'ชั้น 3 — AES-128', name: 'เข้ารหัสด้วย key ถูกต้อง',
         expect: '200',
         skip: (!AES_KEY_HEX || AES_KEY_HEX.length !== 32) && 'AES_SHARED_KEY ต้องเป็น hex 32 ตัว',
-        async run() {
-            const r = await call('POST', '/api/sentTemperature', { body: aesBody(sensorPayload(), AES_KEY_HEX) });
+        async run(i) {
+            const r = await call('POST', '/api/sentTemperature', { body: aesBody(sensorPayload(i), AES_KEY_HEX) });
             return { ok: r.status === 200, detail: `HTTP ${r.status}`, raw: r };
         },
     },
@@ -141,8 +164,8 @@ httpCases.push({
     id: 'L2-04', layer: 'ชั้น 2 — RLS', name: `ขอ safezone_id=${OTHER_SAFEZONE_ID} (ของ user ${OTHER_USER_ID}) ในนาม user ${TEST_USER_ID} ผ่าน API`,
     expect: 'data: null',
     skip: !INTERNAL_KEY && 'ต้องมี INTERNAL_API_KEY',
-    async run() {
-        const r = await call('GET', `/api/setting/getSafezone?takecare_id=${TEST_TAKECARE_ID}&users_id=${TEST_USER_ID}&id=${OTHER_SAFEZONE_ID}`, {
+    async run(i) {
+        const r = await call('GET', `/api/setting/getSafezone?takecare_id=${V(i).takecare_id}&users_id=${V(i).users_id}&id=${V(i).other_safezone}`, {
             headers: { 'x-internal-key': INTERNAL_KEY },
         });
         let data;
@@ -150,6 +173,39 @@ httpCases.push({
         return { ok: r.status === 200 && data === null, detail: `HTTP ${r.status}, data=${JSON.stringify(data)}`, raw: r };
     },
 });
+
+
+// เคส token จริง — ต้องมี TEST_LINE_TOKEN ใน .env (คัดลอกจาก Console ของหน้า LIFF อายุ ~1 ชม.)
+const LINE_TOKEN = process.env.TEST_LINE_TOKEN;
+const TOKEN_OWNER_USER = Number(process.env.TEST_TOKEN_USER_ID) || 51;
+const TOKEN_OWNER_TAKECARE = Number(process.env.TEST_TOKEN_TAKECARE_ID) || 42;
+
+httpCases.push(
+    {
+        id: 'L1-05', layer: 'ชั้น 1 — LINE token', name: `token จริงขอข้อมูลของตัวเอง (user ${TOKEN_OWNER_USER})`,
+        expect: '200 ได้ข้อมูล',
+        skip: !LINE_TOKEN && 'ไม่มี TEST_LINE_TOKEN ใน .env',
+        async run() {
+            const r = await call('GET', `/api/setting/getTemperature?takecare_id=${TOKEN_OWNER_TAKECARE}&users_id=${TOKEN_OWNER_USER}`,
+                { headers: { Authorization: `Bearer ${LINE_TOKEN}` } });
+            let data; try { data = JSON.parse(r.body).data; } catch {}
+            return { ok: r.status === 200 && data, detail: `HTTP ${r.status}, data=${data ? 'มีข้อมูล' : 'ว่าง'}`, raw: r };
+        },
+    },
+    {
+        id: 'L1-06', layer: 'ชั้น 1 — LINE token', name: 'token จริงขอข้อมูลของผู้ใช้อื่นผ่าน URL',
+        expect: 'ไม่ได้ข้อมูลของผู้ใช้อื่น',
+        skip: !LINE_TOKEN && 'ไม่มี TEST_LINE_TOKEN ใน .env',
+        async run(i) {
+            const v = V(i);
+            const r = await call('GET', `/api/setting/getTemperature?takecare_id=${v.takecare_id}&users_id=${v.users_id}`,
+                { headers: { Authorization: `Bearer ${LINE_TOKEN}` } });
+            let data; try { data = JSON.parse(r.body).data; } catch {}
+            const leaked = data && Number(data.users_id) === v.users_id;
+            return { ok: !leaked, detail: `HTTP ${r.status}, ขอของ user ${v.users_id} -> ${leaked ? 'หลุด' : 'ไม่ได้ข้อมูล'}`, raw: r };
+        },
+    },
+);
 
 // ---------- ชั้น 2: RLS (ยิง DB ตรง) ----------
 
@@ -161,7 +217,7 @@ function getPrisma() {
     return prisma;
 }
 
-async function rlsQuery(setUserId) {
+async function rlsQuery(setUserId, targetUserId = OTHER_USER_ID) {
     // เลียนแบบ withRls: เปิด transaction, SET ROLE เป็น role ที่ไม่ใช่ table owner, set_config, แล้ว query
     const db = getPrisma();
     return db.$transaction(async (tx) => {
@@ -174,7 +230,7 @@ async function rlsQuery(setUserId) {
         }
         const rows = await tx.$queryRawUnsafe(
             `SELECT users_id FROM location WHERE users_id = $1`,
-            OTHER_USER_ID
+            targetUserId
         );
         return rows.length;
     });
@@ -184,24 +240,24 @@ const rlsCases = [
     {
         id: 'L2-01', layer: 'ชั้น 2 — RLS', name: 'ไม่ set RLS context แล้ว SELECT',
         expect: '0 แถว',
-        async run() {
-            const n = await rlsQuery(null);
+        async run(i) {
+            const n = await rlsQuery(null, V(i).other_users_id);
             return { ok: n === 0, detail: `${n} แถว` };
         },
     },
     {
         id: 'L2-02', layer: 'ชั้น 2 — RLS', name: `set context = ${TEST_USER_ID} แล้วดึงของ user ${OTHER_USER_ID}`,
         expect: '0 แถว',
-        async run() {
-            const n = await rlsQuery(TEST_USER_ID);
+        async run(i) {
+            const n = await rlsQuery(V(i).users_id, V(i).other_users_id);
             return { ok: n === 0, detail: `${n} แถว` };
         },
     },
     {
         id: 'L2-03', layer: 'ชั้น 2 — RLS', name: `set context = ${OTHER_USER_ID} แล้วดึงของตัวเอง`,
         expect: 'เห็นเฉพาะของตัวเอง',
-        async run() {
-            const n = await rlsQuery(OTHER_USER_ID);
+        async run(i) {
+            const n = await rlsQuery(V(i).other_users_id, V(i).other_users_id);
             return { ok: n >= 0, detail: `${n} แถว (ทุกแถวเป็นของ users_id=${OTHER_USER_ID})` };
         },
     },
@@ -233,7 +289,7 @@ async function main() {
         for (let i = 1; i <= ROUNDS; i++) {
             const at = new Date().toISOString();
             try {
-                const r = await c.run();
+                const r = await c.run(i);
                 rounds.push({ round: i, at, ok: r.ok, detail: r.detail, raw: r.raw });
                 process.stdout.write(r.ok ? '.' : 'X');
             } catch (e) {
@@ -251,8 +307,9 @@ async function main() {
 
     const outDir = path.join(__dirname, 'test-results');
     fs.mkdirSync(outDir, { recursive: true });
-    const stamp = startedAt.toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
-    const base = path.join(outDir, `security-${stamp}`);
+    // ตั้งชื่อไฟล์ตามฝั่งที่ยิง แล้วเขียนทับทุกครั้ง — วันเวลาที่รันอยู่ในไฟล์อยู่แล้ว
+    const isLocal = /localhost|127\.0\.0\.1/.test(BASE);
+    const base = path.join(outDir, isLocal ? 'ผลทดสอบ-ไม่มีเกราะ' : 'ผลทดสอบ-มีเกราะ');
 
     fs.writeFileSync(
         `${base}.json`,
