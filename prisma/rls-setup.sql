@@ -45,7 +45,9 @@ BEGIN
         'fall_records',
         'location',
         'safezone',
-        'takecareperson'
+        'takecareperson',
+        'temperature_settings',
+        'heartrate_settings'
     ]
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

@@ -9,7 +9,7 @@
  *   node scripts/securityTestSuite.js 20         # 20 รอบ
  *   TEST_BASE_URL=http://localhost:3000 node scripts/securityTestSuite.js
  *
- * ผลลัพธ์: scripts/test-results/ผลทดสอบ-มีเกราะ.{md,json} หรือ ผลทดสอบ-ไม่มีเกราะ.{md,json}
+ * ผลลัพธ์: scripts/test-results/ผลทดสอบ-ระบบที่พัฒนาขึ้น.{md,json} หรือ ผลทดสอบ-ระบบเดิม.{md,json}
  */
 
 require('dotenv').config();
@@ -236,6 +236,33 @@ async function rlsQuery(setUserId, targetUserId = OTHER_USER_ID) {
     });
 }
 
+// วัดว่า "ดึงข้อมูลทั้งตารางโดยไม่บอกว่าเป็นใคร" ได้กี่แถว
+// ระบบเดิม (role postgres ข้าม RLS) = ได้ทุกแถว · ระบบที่พัฒนาขึ้น (app_user ไม่มี context) = 0
+const EXPOSURE_TABLES = [
+    'temperature_records', 'heartrate_records', 'dlocation',
+    'fall_records', 'location', 'safezone', 'takecareperson',
+];
+
+async function measureExposure() {
+    const db = getPrisma();
+    const per = {};
+    let totalRows = 0;
+    for (const t of EXPOSURE_TABLES) {
+        try {
+            const n = await db.$transaction(async (tx) => {
+                await tx.$executeRawUnsafe(`SET LOCAL ROLE ${DB_ROLE}`);
+                const rows = await tx.$queryRawUnsafe(`SELECT count(*)::int AS n FROM ${t}`);
+                return Number(rows[0].n);
+            });
+            per[t] = n;
+            totalRows += n;
+        } catch (e) {
+            per[t] = `error: ${e.message}`;
+        }
+    }
+    return { role: DB_ROLE, tables: per, totalRows };
+}
+
 const rlsCases = [
     {
         id: 'L2-01', layer: 'ชั้น 2 — RLS', name: 'ไม่ set RLS context แล้ว SELECT',
@@ -303,19 +330,22 @@ async function main() {
         results.push({ ...pick(c), pass, total: ROUNDS, rounds });
     }
 
+    // ตัวเลขประกอบ — ไม่ใช่กรณีทดสอบ ไม่นับรวมในอัตราการบล็อก
+    const exposure = await measureExposure();
+
     if (prisma) await prisma.$disconnect();
 
     const outDir = path.join(__dirname, 'test-results');
     fs.mkdirSync(outDir, { recursive: true });
     // ตั้งชื่อไฟล์ตามฝั่งที่ยิง แล้วเขียนทับทุกครั้ง — วันเวลาที่รันอยู่ในไฟล์อยู่แล้ว
     const isLocal = /localhost|127\.0\.0\.1/.test(BASE);
-    const base = path.join(outDir, isLocal ? 'ผลทดสอบ-ไม่มีเกราะ' : 'ผลทดสอบ-มีเกราะ');
+    const base = path.join(outDir, isLocal ? 'ผลทดสอบ-ระบบเดิม' : 'ผลทดสอบ-ระบบที่พัฒนาขึ้น');
 
     fs.writeFileSync(
         `${base}.json`,
-        JSON.stringify({ target: BASE, rounds: ROUNDS, startedAt, results }, null, 2)
+        JSON.stringify({ target: BASE, rounds: ROUNDS, startedAt, results, exposure }, null, 2)
     );
-    fs.writeFileSync(`${base}.md`, toMarkdown(BASE, ROUNDS, startedAt, results));
+    fs.writeFileSync(`${base}.md`, toMarkdown(BASE, ROUNDS, startedAt, results, exposure));
 
     const failed = results.filter((r) => !r.skipped && r.pass !== r.total);
     console.log(`\nบันทึกผล: ${base}.md`);
@@ -328,44 +358,49 @@ function pick(c) {
     return { id: c.id, layer: c.layer, name: c.name, expect: c.expect };
 }
 
-function toMarkdown(target, rounds, startedAt, results) {
-    const lines = [];
-    lines.push(`# ผลการทดสอบความปลอดภัย AFE-PLUS-ULTRA`);
-    lines.push('');
-    lines.push(`- ระบบเป้าหมาย: ${target}`);
-    lines.push(`- วันเวลาที่ทดสอบ: ${startedAt.toLocaleString('th-TH')}`);
-    lines.push(`- จำนวนรอบต่อกรณีทดสอบ: ${rounds}`);
-    lines.push('');
-    lines.push('## ตารางสรุปผล');
-    lines.push('');
-    lines.push('| รหัส | ชั้นความปลอดภัย | กรณีทดสอบ | ผลที่คาดหวัง | ผลที่ได้ | ผ่าน/ทั้งหมด | อัตราผ่าน |');
-    lines.push('|---|---|---|---|---|---|---|');
+function toMarkdown(target, rounds, startedAt, results, exposure) {
+    const ATTACK = ['L1-01', 'L1-02', 'L1-03', 'L2-01', 'L2-02', 'L2-04', 'L3-01', 'L3-02'];
+    const done = results.filter((r) => !r.skipped);
+    const atk = done.filter((r) => ATTACK.includes(r.id));
+    const blocked = atk.reduce((n, r) => n + r.pass, 0);
+    const total = atk.reduce((n, r) => n + r.total, 0);
 
+    const L = [];
+    L.push('# ผลการทดสอบความปลอดภัย');
+    L.push('');
+    L.push(`ระบบที่ทดสอบ: ${target}`);
+    L.push(`วันเวลา: ${startedAt.toLocaleString('th-TH')}  ·  ทำซ้ำกรณีละ ${rounds} รอบ  ·  แต่ละรอบใช้บัญชีทดสอบคนละชุด`);
+    L.push('');
+    L.push(`## สรุป — บล็อกการโจมตีได้ ${blocked}/${total} ครั้ง (${((blocked / total) * 100).toFixed(1)}%)`);
+    L.push('');
+    L.push('| รหัส | กรณีทดสอบ | ต้องได้ | ได้จริง | ผ่าน |');
+    L.push('|---|---|---|---|---|');
     for (const r of results) {
-        if (r.skipped) {
-            lines.push(`| ${r.id} | ${r.layer} | ${r.name} | ${r.expect} | ข้าม (${r.skipped}) | - | - |`);
-            continue;
-        }
-        const detail = r.rounds[0]?.detail ?? '-';
-        const rate = ((r.pass / r.total) * 100).toFixed(0);
-        lines.push(`| ${r.id} | ${r.layer} | ${r.name} | ${r.expect} | ${detail} | ${r.pass}/${r.total} | ${rate}% |`);
+        if (r.skipped) { L.push(`| ${r.id} | ${r.name} | ${r.expect} | ข้าม — ${r.skipped} | - |`); continue; }
+        const bad = r.rounds.find((x) => !x.ok);
+        const got = bad ? bad.detail : (r.rounds[0]?.detail ?? '-');
+        L.push(`| ${r.id} | ${r.name} | ${r.expect} | ${got} | ${r.pass}/${r.total} |`);
     }
-
-    lines.push('');
-    lines.push('## บันทึกรายรอบ');
-    lines.push('');
-    for (const r of results) {
-        if (r.skipped) continue;
-        lines.push(`### ${r.id} — ${r.name}`);
-        lines.push('');
-        lines.push('| รอบ | เวลา | ผลที่ได้ | สรุป |');
-        lines.push('|---|---|---|---|');
-        for (const x of r.rounds) {
-            lines.push(`| ${x.round} | ${new Date(x.at).toLocaleTimeString('th-TH')} | ${x.detail} | ${x.ok ? 'ผ่าน' : 'ไม่ผ่าน'} |`);
-        }
-        lines.push('');
+    L.push('');
+    const failed = done.filter((r) => r.pass !== r.total);
+    L.push(failed.length
+        ? `**ไม่ผ่าน:** ${failed.map((r) => `${r.id} (${r.pass}/${r.total})`).join(' · ')}`
+        : '**ผ่านครบทุกกรณีทุกรอบ**');
+    if (exposure) {
+        L.push('');
+        L.push(`## ตัวเลขประกอบ — ดึงข้อมูลทั้งตารางโดยไม่บอกว่าเป็นใคร ได้ ${exposure.totalRows} แถว`);
+        L.push('');
+        L.push(`สั่ง \`SELECT count(*)\` ทั้ง 7 ตารางโดยไม่ตั้ง \`app.current_user_id\` (role = \`${exposure.role}\`)`);
+        L.push('ไม่นับรวมในอัตราการบล็อก เป็นตัวเลขแสดงขนาดของข้อมูลที่เข้าถึงได้');
+        L.push('');
+        L.push('| ตาราง | แถวที่ดึงได้ |');
+        L.push('|---|---|');
+        for (const [t, n] of Object.entries(exposure.tables)) L.push(`| ${t} | ${n} |`);
+        L.push(`| **รวม** | **${exposure.totalRows}** |`);
     }
-    return lines.join('\n');
+    L.push('');
+    L.push('> ข้อมูลดิบรายรอบ (เวลา สถานะ เนื้อที่ตอบกลับ) อยู่ในไฟล์ .json ชื่อเดียวกัน');
+    return L.join(String.fromCharCode(10));
 }
 
 main().catch((e) => {

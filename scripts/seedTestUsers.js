@@ -71,6 +71,13 @@ const SEED = [
                 data: { users_id: u.users_id, takecare_id: t.takecare_id, bpm: 75 },
             });
         }
+        // ค่าตั้งอุณหภูมิ — endpoint getTemperature อ่านตารางนี้ ไม่ใช่ temperature_records
+        const ts = await prisma.temperature_settings.findFirst({ where: { users_id: u.users_id } });
+        if (!ts) {
+            await prisma.temperature_settings.create({
+                data: { users_id: u.users_id, takecare_id: t.takecare_id, max_temperature: 37.5 },
+            });
+        }
         out.push({ users_id: u.users_id, takecare_id: t.takecare_id, safezone_id: z.safezone_id });
     }
     console.log('ผู้ใช้ทดสอบพร้อมใช้งาน:');
