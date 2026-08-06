@@ -132,6 +132,25 @@ const httpCases = [
     },
 ];
 
+// เคสนี้วัด RLS ผ่าน API จริง ไม่ใช่ยิง DB เอง
+// getSafezone สาขา ?id= ดึงด้วย safezone_id อย่างเดียว ไม่กรอง users_id ในโค้ด
+// (src/pages/api/setting/getSafezone.ts) → RLS เป็นตัวกันตัวเดียว
+// ถ้าระบบ bypass RLS จะได้ข้อมูลของ users_id อื่นกลับมา
+const OTHER_SAFEZONE_ID = Number(process.env.TEST_OTHER_SAFEZONE_ID) || 30;
+httpCases.push({
+    id: 'L2-04', layer: 'ชั้น 2 — RLS', name: `ขอ safezone_id=${OTHER_SAFEZONE_ID} (ของ user ${OTHER_USER_ID}) ในนาม user ${TEST_USER_ID} ผ่าน API`,
+    expect: 'data: null',
+    skip: !INTERNAL_KEY && 'ต้องมี INTERNAL_API_KEY',
+    async run() {
+        const r = await call('GET', `/api/setting/getSafezone?takecare_id=${TEST_TAKECARE_ID}&users_id=${TEST_USER_ID}&id=${OTHER_SAFEZONE_ID}`, {
+            headers: { 'x-internal-key': INTERNAL_KEY },
+        });
+        let data;
+        try { data = JSON.parse(r.body).data; } catch { data = undefined; }
+        return { ok: r.status === 200 && data === null, detail: `HTTP ${r.status}, data=${JSON.stringify(data)}`, raw: r };
+    },
+});
+
 // ---------- ชั้น 2: RLS (ยิง DB ตรง) ----------
 
 let prisma = null;
