@@ -35,6 +35,9 @@ export function withRls(getUserId: GetUserId, handler: Handler) {
         }
 
         return basePrisma.$transaction(async (tx) => {
+            // ต้อง SET ROLE ก่อน — connection string ต่อด้วย postgres ซึ่งเป็น superuser + BYPASSRLS
+            // ถ้าไม่สลับ role, policy ทุกตัวถูกข้าม (FORCE ROW LEVEL SECURITY กันได้แค่ owner ที่ไม่ใช่ superuser)
+            await tx.$executeRawUnsafe(`SET LOCAL ROLE app_user`);
             await tx.$executeRaw`SELECT set_config('app.current_user_id', ${String(userId)}, true)`;
             return handler(req, res, tx);
         });
