@@ -6,6 +6,7 @@ import { replyMessage, replyRegistration, replyUserData, replyNotRegistration, r
 import { encrypt, parseQueryString } from '@/utils/helpers'
 import { postbackSafezone, postbackAccept, postbackClose } from '@/lib/lineFunction'
 import * as api from '@/lib/listAPI'
+import { withLineSignature } from '@/lib/withLineSignature'
 
 type Data = {
   message: string;
@@ -78,7 +79,11 @@ const getLocation = async (takecare_id: number, users_id: number, safezone_id: n
   }
 }
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// รับเฉพาะเหตุการณ์ที่ LINE ส่งมาจริง (ตรวจ x-line-signature) — ต้องปิด bodyParser เพื่อได้ body ดิบ
+export const config = { api: { bodyParser: false } }
+export default withLineSignature(handle)
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
     try {
       if (req.body.events[0]) {

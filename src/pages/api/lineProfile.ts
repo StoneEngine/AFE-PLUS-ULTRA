@@ -15,6 +15,7 @@ import {
     replyNotification,
 } from "@/utils/apiLineReply";
 import { encrypt, parseQueryString } from "@/utils/helpers";
+import { withLineSignature } from "@/lib/withLineSignature";
 import {
     postbackSafezone,
     postbackAccept,
@@ -183,7 +184,11 @@ const getHeartRate = async (takecare_id: number, users_id: number) => {
     }
 };
 
-export default async function handle(
+// รับเฉพาะเหตุการณ์ที่ LINE ส่งมาจริง (ตรวจ x-line-signature) — ต้องปิด bodyParser เพื่อได้ body ดิบ
+export const config = { api: { bodyParser: false } };
+export default withLineSignature(handle);
+
+async function handle(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
