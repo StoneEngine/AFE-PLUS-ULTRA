@@ -1,13 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { withRls } from '@/lib/withRls'
+import { withRlsAuth } from '@/lib/withRlsAuth'
 import { decrypt } from '@/utils/helpers'
 
-export default withRls(
-    req => {
-        const id = decrypt(req.query.id as string)
-        const v = Array.isArray(id) ? id[0] : id
-        return v ? Number(v) : null
-    },
+// ด่าน: ยืนยันตัวตนจาก LINE ID Token (หน้าเว็บ) หรือ x-internal-key (เซิร์ฟเวอร์) ก่อน แล้ว RLS กรองให้เห็นเฉพาะของตัวเอง
+// เดิมห่อ withRls(decrypt(req.query.id)) เชื่อ id ที่ผู้โจมตีสร้างเอง (กุญแจ CryptoJS หลุดไป client) ดึงข้อมูลคนอื่นได้
+export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'GET') {
             try {
