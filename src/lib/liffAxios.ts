@@ -55,6 +55,12 @@ export function initLiffForWeb(): Promise<boolean> {
         if (!LIFF_WEB_ID || typeof window === 'undefined') return true;
         try {
             await liff.init({ liffId: LIFF_WEB_ID });
+            // LINE ID Token มีอายุ 1 ชั่วโมง แต่ LIFF เก็บตัวเก่าไว้ในเบราว์เซอร์ต่อ (เจอจริง 16 ต.ค. 69: ออก 19:54:59 หมด 20:54:59
+            // หน้าเว็บส่งตัวที่หมดแล้ว API ตอบ 401) — ใกล้หมด (เหลือไม่ถึง 1 นาที) ให้ออกจากระบบแล้วล็อกอินใหม่
+            const exp = liff.isLoggedIn() ? liff.getDecodedIDToken()?.exp : undefined;
+            if (exp && exp * 1000 < Date.now() + 60_000 && !liff.isInClient()) {
+                liff.logout();
+            }
             if (!liff.isLoggedIn()) {
                 liff.login({ redirectUri: window.location.href });
                 return false;
