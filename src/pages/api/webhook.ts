@@ -13,7 +13,9 @@ type Data = {
 }
 
 const getUser = async (userId: string) => {
-  const responseUser = await axios.get(`${process.env.WEB_DOMAIN}/api/user/getUser/${userId}`);
+  const responseUser = await axios.get(`${process.env.WEB_DOMAIN}/api/user/getUser/${userId}`, {
+    headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+  });
   if (responseUser.data?.data) {
     return responseUser.data.data;
   } else {

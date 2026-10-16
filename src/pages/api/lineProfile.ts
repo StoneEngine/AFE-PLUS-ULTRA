@@ -32,7 +32,8 @@ type Data = {
 const getUser = async (userId: string) => {
     console.log("Fetching user data for userId:", userId); // เพิ่มการตรวจสอบว่าเราได้ userId ที่ถูกต้อง
     const responseUser = await axios.get(
-        `${process.env.WEB_DOMAIN}/api/user/getUser/${userId}`
+        `${process.env.WEB_DOMAIN}/api/user/getUser/${userId}`,
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (responseUser.data?.data) {
         console.log("User data retrieved:", responseUser.data.data); // แสดงข้อมูลที่ได้จาก API

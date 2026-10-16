@@ -3,8 +3,11 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { NextResponse } from 'next/server'
 import axios from "axios";
 import prisma from '@/lib/prisma'
+import { withLineOwner } from '@/lib/withLineOwner'
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+export default withLineOwner(handle)
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'GET') {
         try {
             const id_line = req.query.id

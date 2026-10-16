@@ -7,7 +7,9 @@ const urlName = (url: string) => {
 
 export const getUser = async (userLineId: string) => {
     const url = urlName(`/api/user/getUser/${userLineId}`)
-	const responseUser = await axios.get(url);
+	const responseUser = await axios.get(url, {
+		headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+	});
 	if(responseUser.data?.data){
 		return responseUser.data.data
 	}else{

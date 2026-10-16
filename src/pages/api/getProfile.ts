@@ -3,11 +3,14 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getUserProfile } from '@/utils/apiLineReply';
+import { withLineOwner } from '@/lib/withLineOwner';
 type Data = {
 	message: string;
 	data?: any;
 }
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+export default withLineOwner(handle)
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method === 'GET') {
 		const id = req.query.id
 		const profile = await getUserProfile(id as string)
