@@ -17,7 +17,6 @@ export default withRls(
 
 			const body = req.body;
 			const { uid } = req.body;
-			console.log("📥 Received Request Body:", req.body);
 			console.log("🔍 Checking UID:", uid);
 			if (!body.uid) {
 				return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ uid' });
@@ -27,10 +26,16 @@ export default withRls(
 				return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uid ไม่ใช่ตัวเลข' });
 			}
 
+			// นาฬิกาส่ง PIN ที่เก็บไว้ตอนล็อกอินมาด้วย — ตรวจคู่กับ uid แบบเดียวกับ watchconnphone
+			if (body.pin === undefined || body.pin === '' || isNaN(Number(body.pin))) {
+				return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ pin หรือ pin ไม่ใช่ตัวเลข' });
+			}
+
 			try {
 				const user = await prisma.users.findFirst({
 					where: {
-						users_id: Number(body.uid)
+						users_id: Number(body.uid),
+						users_pin: Number(body.pin),
 					}
 				});
 
@@ -48,7 +53,7 @@ export default withRls(
 
 					await replyNotificationSOS({ replyToken, message });
 
-					return res.status(200).json({ message: 'success', data: user });
+					return res.status(200).json({ message: 'success' });
 				} else {
 					return res.status(400).json({ message: 'error', data: 'ไม่พบข้อมูล' });
 				}
