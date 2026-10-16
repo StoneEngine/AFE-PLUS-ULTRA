@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import LoadPage from '@/components/LayoutPage/LoadPage';
 import PageChange from '@/components/LayoutPage/PageChange';
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider';
-import { setupAxiosAuth } from '@/lib/liffAxios';
+import { setupAxiosAuth, initLiffForWeb, LIFF_WEB_ID } from '@/lib/liffAxios';
 
 if (typeof window !== 'undefined') {
   setupAxiosAuth();
@@ -24,8 +24,18 @@ const App = ({ Component, pageProps }: AppProps) => {
   const { title, description, slug, titleBar } = pageProps;
   const router = useRouter();
   const isAdminRoute = router.pathname.startsWith('/admin');
+  // หน้าเว็บผู้ใช้ (เปิดจากข้อความ LINE) ต้องล็อกอิน LINE ก่อน — /liff/* เริ่ม LIFF ของตัวเองอยู่แล้ว
+  const needsLiff = !!LIFF_WEB_ID && !isAdminRoute && !router.pathname.startsWith('/liff');
+  const [liffReady, setLiffReady] = useState(!needsLiff);
 
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!needsLiff) return;
+    initLiffForWeb().then((ready) => {
+      if (ready) setLiffReady(true);
+    });
+  }, [needsLiff]);
 
   useEffect(() => {
     router.events.on('routeChangeStart', (url, { shallow }) => {
@@ -61,7 +71,7 @@ const App = ({ Component, pageProps }: AppProps) => {
           </AuthProvider>
         ) : (
           <MainLayouts title={title} description={description} slug={slug} titleBar={titleBar}>
-            <Component {...pageProps} />
+            {liffReady ? <Component {...pageProps} /> : <LoadPage />}
           </MainLayouts>
         )
       }
