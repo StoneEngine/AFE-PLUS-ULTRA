@@ -1,7 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import axios from "axios";
+import { withInternalKey } from "@/lib/withInternalKey";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+// ไม่มีหน้าเว็บไหนเรียก (location.tsx ใช้ Google Maps ฝั่งเบราว์เซอร์ · navigation.tsx ใช้ Mapbox)
+// ปิดไว้ให้เซิร์ฟเวอร์เราเรียกได้อย่างเดียว — เดิมคนนอกใช้คีย์ Google Maps ของเซิร์ฟเวอร์ได้ฟรี
+export default withInternalKey(handler);
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { origin, destination } = req.query;
 
     if (!origin || !destination) {

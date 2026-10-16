@@ -1,7 +1,22 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '@/lib/prisma'
+import { withLineOwner } from '@/lib/withLineOwner'
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// สมัครได้เฉพาะด้วย LINE user ID ของตัวเอง (ตรงกับ LINE ID Token) และได้แค่สถานะผู้ดูแล (status_id = 1)
+// ตามที่ registration.tsx ส่งเสมอ — กันคนนอกสมัครแทนคนอื่น หรือตั้งตัวเองเป็นเจ้าหน้าที่ (status 3)
+const onlySelfCaregiver = withLineOwner((req: NextApiRequest, res: NextApiResponse) => {
+    if (req.method === 'POST' && Number(req.body?.status_id) !== 1) {
+        return res.status(400).json({ message: 'error', data: 'สมัครผ่านหน้าเว็บได้เฉพาะผู้ดูแล' })
+    }
+    return handle(req, res)
+}, (req) => req.body?.users_line_id)
+
+export default function guarded(req: NextApiRequest, res: NextApiResponse) {
+    if (req.method === 'OPTIONS') return handle(req, res) // preflight ไม่มี Token ให้ handler เดิมตอบ
+    return onlySelfCaregiver(req, res)
+}
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     res.setHeader('Access-Control-Allow-Origin', '*'); // อนุญาตให้ทุกต้นทางเข้าถึงได้
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // อนุญาตให้ method เหล่านี้
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); // อนุญาตให้ header เหล่านี้

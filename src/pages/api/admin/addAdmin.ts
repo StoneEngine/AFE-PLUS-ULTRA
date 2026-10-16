@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'; 
 import prisma from '@/lib/prisma';
 import { hash, genSalt } from 'bcrypt';
+import authMiddleware from '@/lib/authMiddleware';
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === 'POST') {
@@ -62,4 +63,5 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     }
 };
 
-export default handler;
+// ต้องล็อกอินหน้าแอดมินก่อน (JWT แบบเดียวกับ admin API ตัวอื่น) — เดิมใครก็สร้างบัญชีผู้ดูแลระบบได้
+export default authMiddleware(handler);
