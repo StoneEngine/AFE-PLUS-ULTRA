@@ -46,7 +46,8 @@ const getUser = async (userId: string) => {
 const getGroupLine = async (groupId: string) => {
     console.log("Fetching group data for groupId:", groupId); // เพิ่มการตรวจสอบการค้นหากลุ่ม
     const response = await axios.get(
-        `${process.env.WEB_DOMAIN}/api/master/getGroupLine?group_line_id=${groupId}`
+        `${process.env.WEB_DOMAIN}/api/master/getGroupLine?group_line_id=${groupId}`,
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (response.data?.data) {
         console.log("Group data retrieved:", response.data.data); // แสดงข้อมูลกลุ่มที่ได้จาก API
@@ -60,7 +61,8 @@ const addGroupLine = async (groupId: string) => {
     console.log("Adding new group data for groupId:", groupId); // เพิ่มการตรวจสอบการเพิ่มกลุ่ม
     const response = await axios.post(
         `${process.env.WEB_DOMAIN}/api/master/getGroupLine`,
-        { group_line_id: groupId, group_name: "" }
+        { group_line_id: groupId, group_name: "" },
+        { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } }
     );
     if (response.data?.id) {
         console.log("New group added with id:", response.data.id); // แสดง ID ของกลุ่มใหม่ที่เพิ่ม

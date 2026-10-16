@@ -5,11 +5,15 @@ import prisma from '@/lib/prisma'
 
 import { decrypt } from '@/utils/helpers'
 import _ from 'lodash'
+import { withInternalKey } from '@/lib/withInternalKey'
 type Data = {
     message: string;
     data?: any;
 }
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// มีแค่เซิร์ฟเวอร์เรียก (lineFunction ผ่าน listAPI) — คนนอกอ่าน/สร้าง/แก้เคสขอความช่วยเหลือตรงๆ ไม่ได้
+export default withInternalKey(handle)
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     if(req.method === 'GET'){
         try {
             const query      = req.query

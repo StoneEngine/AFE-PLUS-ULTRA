@@ -45,7 +45,9 @@ export const getSafezone = async (takecare_id: number, users_id: number) => {
 
 export const getExtendedHelp = async (takecareId: number, usersId: number) => {
     const url = urlName(`/api/extendedhelp?takecareId=${takecareId}&usersId=${usersId}`)
-	const response = await axios.get(url);
+	const response = await axios.get(url, {
+		headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+	});
 	if(response.data?.data){
 		return response.data.data
 	}else{
@@ -55,7 +57,9 @@ export const getExtendedHelp = async (takecareId: number, usersId: number) => {
 
 export const getExtendedHelpById = async (id: number) => {
     const url = urlName(`/api/extendedhelp?extenId=${id}`)
-	const response = await axios.get(url);
+	const response = await axios.get(url, {
+		headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+	});
 	if(response.data?.data){
 		return response.data.data
 	}else{
@@ -66,7 +70,9 @@ export const getExtendedHelpById = async (id: number) => {
 export const saveExtendedHelp = async (data: any) => {
     try {
         const url = urlName(`/api/extendedhelp`)
-        const response = await axios.post(url, data);
+        const response = await axios.post(url, data, {
+            headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+        });
         if(response.data?.id){
             return response.data.id
         }else{
@@ -80,7 +86,9 @@ export const saveExtendedHelp = async (data: any) => {
 export const updateExtendedHelp = async (data: any) => {
     try {
         const url = urlName(`/api/extendedhelp`)
-        const response = await axios.put(url, data);
+        const response = await axios.put(url, data, {
+            headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+        });
         if(response.data?.data){
             return response.data.data
         }else{

@@ -1,7 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
+import { withLineUser } from '@/lib/withLineUser';
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// ยืมได้เฉพาะในนามตัวเอง (borrow_user_id ต้องเป็น users_id ของคนที่ล็อกอิน)
+export default withLineUser(handle, (req, usersId) => Number(req.body?.borrow_user_id) === usersId);
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'POST') {
         try {
             const body = req.body;

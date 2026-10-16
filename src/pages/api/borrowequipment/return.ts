@@ -1,7 +1,18 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
+import { withLineUser } from '@/lib/withLineUser';
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// คืนได้เฉพาะรายการที่ตัวเองยืม — ทุก borrow_equipment_id ใน returnList ต้องอยู่ในการยืมของคนที่ล็อกอิน
+export default withLineUser(handle, async (req, usersId) => {
+    const ids: number[] = Array.isArray(req.body?.returnList) ? req.body.returnList.map(Number) : [];
+    if (ids.length === 0) return true; // handler ตอบ 400 เอง
+    const owned = await prisma.borrowequipment_list.count({
+        where: { borrow_equipment_id: { in: ids }, borrow_id_ref: { borrow_user_id: usersId } },
+    });
+    return owned === ids.length;
+});
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'POST') {
         try {
             const { returnList } = req.body; // รับรายการอุปกรณ์ที่ต้องการคืน (array ของ borrow_equipment_id)

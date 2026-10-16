@@ -24,7 +24,9 @@ const getUser = async (userId: string) => {
 }
 
 const getGroupLine = async (groupId: string) => {
-  const response = await axios.get(`${process.env.WEB_DOMAIN}/api/master/getGroupLine?group_line_id=${groupId}`);
+  const response = await axios.get(`${process.env.WEB_DOMAIN}/api/master/getGroupLine?group_line_id=${groupId}`, {
+    headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+  });
   if (response.data?.data) {
     return response.data.data;
   } else {
@@ -33,7 +35,9 @@ const getGroupLine = async (groupId: string) => {
 }
 
 const addGroupLine = async (groupId: string) => {
-  const response = await axios.post(`${process.env.WEB_DOMAIN}/api/master/getGroupLine`, { group_line_id: groupId, group_name: '' });
+  const response = await axios.post(`${process.env.WEB_DOMAIN}/api/master/getGroupLine`, { group_line_id: groupId, group_name: '' }, {
+    headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' }
+  });
   if (response.data?.id) {
     return response.data.id;
   } else {

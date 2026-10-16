@@ -4,8 +4,12 @@ import { NextResponse } from 'next/server'
 import axios from "axios";
 import prisma from '@/lib/prisma'
 import _ from "lodash";
+import { withInternalKey } from '@/lib/withInternalKey'
 
-export default async function handle(req: NextApiRequest, res: NextApiResponse) {
+// มีแค่เซิร์ฟเวอร์เรียก (webhook, lineProfile) — คนนอกอ่าน/สร้างกลุ่ม LINE ตรงๆ ไม่ได้
+export default withInternalKey(handle)
+
+async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'POST') {
         try {
             const group_line_id = req.body.group_line_id
