@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
 import { compare } from 'bcrypt';
+import { passwordProblem } from '@/lib/passwordPolicy';
+import { clientIp, secondsBlocked, recordFail, recordSuccess } from '@/lib/loginRateLimit';
 
 const SECRET_KEY = process.env.SECRET_KEY;
 
@@ -17,6 +19,21 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
             return res.status(401).json({ message: 'Username and password are required' });
         }
 
+        // ASVS 6.3.1: คู่ชื่อผู้ใช้ + IP ที่ใส่รหัสผิดครบ 5 ครั้งใน 15 นาที ถูกพัก 15 นาที (docs/SECURITY-LOGIN.md)
+        const ip = clientIp(req);
+        const wait = secondsBlocked(String(username), ip);
+        if (wait > 0) {
+            res.setHeader('Retry-After', String(wait));
+            return res.status(429).json({ message: `ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ ${Math.ceil(wait / 60)} นาที` });
+        }
+
+        // ASVS 6.2.8: รหัสที่ bcrypt จะตัดท้ายทิ้ง ไม่รับตั้งแต่ต้น
+        const problem = passwordProblem(password);
+        if (problem) {
+            recordFail(String(username), ip);
+            return res.status(401).json({ message: 'User หรือ Password ไม่ถูกต้อง' });
+        }
+
         try {
             // ค้นหาผู้ใช้ตาม `username`
             const user = await prisma.users.findFirst({
@@ -28,20 +45,20 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
                 }
             });
 
-            console.log(user)
             if (!user) {
+                recordFail(String(username), ip);
                 return res.status(401).json({ message: 'Username หรือ Password ไม่ถูกต้อง' });
 
             }
-            
 
-            // ตรวจสอบรหัสผ่าน
-            console.log(password,user.users_passwd)
+
+            // ตรวจสอบรหัสผ่าน (เลิกพิมพ์รหัสผ่านและค่า hash ลง log)
             const isPasswordMatch = await compare(password, user.users_passwd);
-            console.log(isPasswordMatch)
             if (!isPasswordMatch) {
+                recordFail(String(username), ip);
                 return res.status(401).json({ message: 'User หรือ Password ไม่ถูกต้อง' });
             }
+            recordSuccess(String(username), ip);
 
             // สร้าง token
             const accessToken = jwt.sign(

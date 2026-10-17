@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 // import { matchPassword } from '@/utils/helpers'
 import { compare, genSalt, hash } from 'bcrypt';
 import authMiddleware from '@/lib/authMiddleware';
+import { passwordProblem } from '@/lib/passwordPolicy';
 
 const SECRET_KEY = process.env.SECRET_KEY;
 
@@ -18,6 +19,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
         if (!user_id || !old_password || !new_password) {
             return res.status(401).json({ message: 'พารามิเตอร์ไม่ครบ' });
         }
+        const problem = passwordProblem(new_password); // ASVS 6.2.8
+        if (problem) return res.status(400).json({ message: problem });
         try {
             
            const user = await prisma.users.findFirst({
@@ -39,7 +42,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
                     users_id: user_id
                 },
                 data:{
-                    users_passwd: await hash(new_password, await genSalt(8))
+                    // OWASP Password Storage Cheat Sheet: bcrypt work factor ขั้นต่ำ 10 (เดิม 8)
+                    users_passwd: await hash(new_password, await genSalt(10))
                 }
             });
 

@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '@/lib/prisma'
 import { withLineOwner } from '@/lib/withLineOwner'
+import { hash, genSalt } from 'bcrypt'
+import { passwordProblem } from '@/lib/passwordPolicy'
 
 // สมัครได้เฉพาะด้วย LINE user ID ของตัวเอง (ตรงกับ LINE ID Token) และได้แค่สถานะผู้ดูแล (status_id = 1)
 // ตามที่ registration.tsx ส่งเสมอ — กันคนนอกสมัครแทนคนอื่น หรือตั้งตัวเองเป็นเจ้าหน้าที่ (status 3)
@@ -30,12 +32,17 @@ async function handle(req: NextApiRequest, res: NextApiResponse) {
         try {
             if (req.body) {
                 const body = req.body
+                // ASVS 11.4.1: เก็บรหัสผ่านด้วย bcrypt (เดิมหน้าเว็บแปลงด้วย MD5 ก่อนส่งมา)
+                // users_passwd ในฐานข้อมูลห้ามว่าง เดิมถ้าไม่ส่งมา prisma ก็ล้มอยู่แล้ว จึงตอบ 400 ตั้งแต่ตรงนี้
+                const problem = passwordProblem(body.users_passwd) // ASVS 6.2.8
+                if (problem) return res.status(400).json({ message: 'error', data: problem })
+                const passwd = await hash(body.users_passwd, await genSalt(10))
                 await prisma.users.create({
                     data: {
                         users_line_id      : body.users_line_id,
                         users_fname        : body.users_fname,
                         users_sname        : body.users_sname,
-                        users_passwd       : body.users_passwd,
+                        users_passwd       : passwd,
                         users_pin          : Number(body.users_pin),
                         status_id          : body.status_id,
                         users_alert_battery: 0,

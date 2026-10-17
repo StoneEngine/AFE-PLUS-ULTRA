@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { hash, genSalt } from 'bcrypt';
 import authMiddleware from '@/lib/authMiddleware';
+import { passwordProblem } from '@/lib/passwordPolicy';
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === 'POST') {
@@ -21,6 +22,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         ) {
             return res.status(400).json({ message: 'กรุณาระบุข้อมูล Username, Password, ชื่อ, นามสกุล และ PIN' });
         }
+        const problem = passwordProblem(password); // ASVS 6.2.8
+        if (problem) return res.status(400).json({ message: problem });
 
         try {
             // เข้ารหัสรหัสผ่าน

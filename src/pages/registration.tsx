@@ -12,7 +12,6 @@ import InputLabel from '@/components/Form/InputLabel';
 import SelectAddress from '@/components/Form/SelectAddress'; // 🔥 Import component ใหม่
 import ModalAlert from '@/components/Modals/ModalAlert';
 import axios from 'axios';
-import md5 from 'md5';
 
 // Import Validation
 import { useForm } from 'react-hook-form';
@@ -225,7 +224,8 @@ const Registration = () => {
             const data = {
                 users_line_id: router.query.auToken,
                 users_fname: formData.users_fname,
-                users_passwd: formData.users_passwd ? md5(formData.users_passwd) : undefined,
+                // ASVS 11.4.1: เลิกแปลงด้วย MD5 บนหน้าเว็บ ส่งผ่าน HTTPS ให้เซิร์ฟเวอร์เก็บด้วย bcrypt (registration/create)
+                users_passwd: formData.users_passwd || undefined,
                 users_pin: formData.users_pin,
                 status_id: 1,
                 users_sname: formData.users_sname,
