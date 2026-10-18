@@ -1,5 +1,3 @@
-import withCommonData from '@/lib/withCommonData';
-import { GetServerSideProps } from 'next';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import React, { useEffect, useState, useCallback } from 'react';
@@ -245,9 +243,11 @@ const Registration = () => {
             // ✅ ย้าย onGetUserData ไปเรียกใน onConfirmSubmit แทน (เพื่อไม่ให้ขัดแย้งกับ alert)
 
         } catch (error) {
-            setAlert({ 
-                show: true, 
-                message: 'ไม่สามารถบันทึกข้อมูลได้',
+            // แสดงเหตุที่เซิร์ฟเวอร์ปฏิเสธ (เช่น PIN หรือรหัสผ่านเดาง่าย) ถ้ามี
+            const serverMessage = axios.isAxiosError(error) && typeof error.response?.data?.data === 'string' ? error.response.data.data : '';
+            setAlert({
+                show: true,
+                message: serverMessage || 'ไม่สามารถบันทึกข้อมูลได้',
                 showClose: true,
                 autoCloseMs: undefined,
                 messageClassName: undefined
@@ -567,11 +567,13 @@ const Registration = () => {
     )
 }
 
-export const getServerSideProps: GetServerSideProps = withCommonData({
+// ASVS 3.2.1: เลิกใช้ getServerSideProps (withCommonData) ที่ทำให้มี /_next/data/<buildId>/registration.json
+// ซึ่งเปิดตรงในเบราว์เซอร์ได้และไม่มี header กันแสดงผิดบริบท · ชื่อหน้าย้ายมาเป็นค่าคงที่ของหน้า (_app.tsx อ่าน Component.meta)
+Registration.meta = {
     title: 'ลงทะเบียน',
     description: 'ลงทะเบียน',
     slug: '',
     titleBar: 'ลงทะเบียน'
-});
+} satisfies LayoutMetaProps;
 
 export default Registration

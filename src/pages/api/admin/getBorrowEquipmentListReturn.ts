@@ -1,11 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import authMiddleware from '@/lib/authMiddleware';
 import prisma from '@/lib/prisma';
+import { positiveInt } from '@/lib/inputTypes';
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === 'GET') {
         try {
             const { name, name_borrow, status } = req.query;
+            // ASVS 2.2.1: name name_borrow ต้องเป็นข้อความตัวเดียว ส่งซ้ำ (?name=a&name=b) ได้ array ที่ contains ของ Prisma ไม่รับ (เดิมได้ HTTP 500)
+            if ((name !== undefined && typeof name !== 'string') || (name_borrow !== undefined && typeof name_borrow !== 'string')) {
+                return res.status(400).json({ message: 'error', data: 'name และ name_borrow ต้องเป็นข้อความ' });
+            }
 
             const filters: any = {
                 borrow_delete_date: null,
@@ -32,17 +37,22 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
             };
 
             if (status) {
-                filters.borrow_status = parseInt(status as string);
+                // ASVS 2.2.1: สถานะต้องเป็นจำนวนเต็มบวก (หน้าแอดมินส่ง '' หรือ '1' '2' '3') เดิม parseInt รับ "2abc" เป็น 2
+                const statusId = positiveInt(status);
+                if (!statusId) return res.status(400).json({ message: 'error', data: 'status ไม่ถูกต้อง' });
+                filters.borrow_status = statusId;
             }
 
             // ✅ คิวรี่ข้อมูลการยืมอุปกรณ์
             const borrowequipment = await prisma.borrowequipment.findMany({
                 where: filters,
+                // ASVS 15.3.1: ผู้เรียก (pages/admin/return_equipment.tsx ผ่าน lib/service/borrowEquipment.ts) อ่านแค่ช่องที่เหลือ
+                // ไม่คืน borrow_return (หน้าเว็บอ่านแค่ในบรรทัดคอมเมนต์) borrow_address borrow_tel borrow_objective borrow_create_date borrow_update_date
+                // และ borrowequipment_list[].borrow_equipment_id borrow_equipment_status equipment_id (เดิม select 18 ช่อง + relation)
                 select: {
                     borrow_id: true,
                     borrow_name: true,
                     borrow_date: true,
-                    borrow_return: true,
                     borrow_status: true,
                     users_id_ref: {
                         select: {
@@ -50,17 +60,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
                             users_sname: true,
                         },
                     },
-                    borrow_address: true,
-                    borrow_tel: true,
-                    borrow_objective: true,
                     borrow_equipment_status: true,
-                    borrow_create_date: true,
-                    borrow_update_date: true,
                     borrowequipment_list: {
                         select: {
-                            borrow_equipment_id: true,
-                            borrow_equipment_status: true,
-                            equipment_id: true, // ✅ ดึง equipment_id แทน borrow_equipment
                             equipment: { // ✅ ดึงข้อมูลอุปกรณ์ที่ถูกยืม
                                 select: {
                                     equipment_name: true,

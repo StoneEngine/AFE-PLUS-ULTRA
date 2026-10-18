@@ -2,6 +2,8 @@
 import moment from 'moment';
 import prisma from '@/lib/prisma';
 import { withUserContext } from '@/lib/withUserContext';
+import { storedPinText } from '@/lib/pinPolicy';
+import { positiveInt } from '@/lib/inputTypes';
 const WEB_API = process.env.WEB_API_URL;
 const LINE_MESSAGING_API = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
@@ -18,10 +20,12 @@ export const replyMapCoordinates = async ({
 }: { toLineId: string; extenId?: number | string; takecareId?: number | string }) => {
     try {
         // Determine target takecare_id either from provided takecareId or from extendedhelp record
-        let targetTakecareId: number | undefined = takecareId ? Number(takecareId) : undefined;
+        // ASVS 2.2.1: รหัสจาก postback ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" และค่าแปลกทำให้ Prisma ล้ม)
+        let targetTakecareId: number | undefined = positiveInt(takecareId) ?? undefined;
+        const extenIdNum = positiveInt(extenId);
 
-        if (!targetTakecareId && extenId) {
-            const ex = await prisma.extendedhelp.findUnique({ where: { exten_id: Number(extenId) } });
+        if (!targetTakecareId && extenIdNum) {
+            const ex = await prisma.extendedhelp.findUnique({ where: { exten_id: extenIdNum } });
             if (ex?.takecare_id) targetTakecareId = Number(ex.takecare_id);
         }
 
@@ -789,7 +793,8 @@ export const replyConnection = async ({
                                     spacing: "sm",
                                     contents: [
                                         layoutBoxBaseline("ID", `${userData.users_id}`),
-                                        layoutBoxBaseline("PIN", `${userData.users_pin}`),
+                                        // แสดง 4 หลักเสมอ (PIN "0123" เก็บเป็น 123) เพราะ watchconnphone รับเฉพาะ PIN 4 หลัก
+                                        layoutBoxBaseline("PIN", storedPinText(userData.users_pin)),
                                     ]
                                 },
                                 // {
@@ -1304,7 +1309,7 @@ export const replyUserData = async ({
                                     spacing: "sm",
                                     contents: [
                                         layoutBoxBaseline("ชื่อ", `${userData.users_fname} ${userData.users_sname}`),
-                                        layoutBoxBaseline("Pin", userData.users_pin.toString()),
+                                        layoutBoxBaseline("Pin", storedPinText(userData.users_pin)),
                                         layoutBoxBaseline("สถานะ", userData.users_status_id.status_name),
                                         layoutBoxBaseline("ที่อยู่", `${userData.users_number || '-'} หมู่ ${userData.users_moo || '-'}`),
                                         layoutBoxBaseline("ถนน", `${userData.users_road || '-'}`),

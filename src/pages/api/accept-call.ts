@@ -1,5 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { postbackAccept } from '@/lib/lineFunction';
+import { verifyLineToken } from '@/lib/verifyLineToken';
+import { nestedValueProblem } from '@/lib/inputTypes';
+import { fieldProblem, ACCEPT_CALL_RULES } from '@/lib/inputRules';
 
 type Data = {
     message: string;
@@ -20,32 +23,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
         }
         const idToken = authHeader.split(' ')[1]; // ดึง Token ออกมา
 
-        // 2. นำ ID Token ไป Verify กับเซิร์ฟเวอร์ของ LINE 
-        const verifyParams = new URLSearchParams();
-        verifyParams.append('id_token', idToken);
-        verifyParams.append('client_id', process.env.LINE_LOGIN_CHANNEL_ID || 'ใส่_CHANNEL_ID_ของ_LINE_LOGIN_ที่นี่');
-
-        const verifyResponse = await fetch('https://api.line.me/oauth2/v2.1/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: verifyParams.toString(),
-        });
-
-        const verifyData = await verifyResponse.json();
-
-        // 3. เตะออกทันทีถ้า Token ปลอมหรือหมดอายุ
-        if (!verifyResponse.ok || verifyData.error) {
+        // 2–4. ASVS 9.1.1 9.1.2 9.1.3 9.2.1: ตรวจด้วย verifyLineToken ตัวเดียวกับทุก API
+        // (ตรวจลายเซ็น ES256 ในแอป กุญแจจาก LINE ตาม kid ตรวจ iss aud exp nbf แล้วถาม LINE ซ้ำ) แทนการส่งให้ LINE ตรวจอย่างเดียว
+        const realOperatorLineId = await verifyLineToken(idToken);
+        if (!realOperatorLineId) {
             return res.status(401).json({ message: 'Unauthorized: Fake or expired token' });
         }
-
-        // 4. ดึง LINE ID ที่แท้จริงจาก Token (ฟิลด์ sub คือ User ID ที่ LINE ยืนยันแล้ว)
-        const realOperatorLineId = verifyData.sub;
 
         // 5. รับค่าอื่นๆ จาก Body ตามปกติ (สังเกตว่าเราไม่รับ operatorLineId จาก Body อีกต่อไป)
         const { extenId, takecareId, userLineId, groupId, tel } = req.body || {};
 
         if (!extenId || !takecareId || !userLineId || !groupId || !tel) {
             return res.status(400).json({ message: 'missing params' });
+        }
+        // ASVS 2.2.2: กฎของทุกช่องตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+        const fieldError = nestedValueProblem(req.body) ?? fieldProblem(req.body, ACCEPT_CALL_RULES);
+        if (fieldError) {
+            return res.status(400).json({ message: fieldError });
         }
 
         // 6. ใช้ realOperatorLineId ที่ Verify แล้วส่งลงฐานข้อมูล

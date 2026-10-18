@@ -21,7 +21,8 @@ if (typeof window !== 'undefined') {
 }
 
 const App = ({ Component, pageProps }: AppProps) => {
-  const { title, description, slug, titleBar } = pageProps;
+  // หน้าที่ไม่มี getServerSideProps ส่งชื่อหน้าเป็นค่าคงที่ Component.meta (ASVS 3.2.1 registration elderly_registration)
+  const { title, description, slug, titleBar } = (Component as { meta?: LayoutMetaProps }).meta ?? pageProps;
   const router = useRouter();
   const isAdminRoute = router.pathname.startsWith('/admin');
   // หน้าเว็บผู้ใช้ (เปิดจากข้อความ LINE) ต้องล็อกอิน LINE ก่อน — /liff/* เริ่ม LIFF ของตัวเองอยู่แล้ว

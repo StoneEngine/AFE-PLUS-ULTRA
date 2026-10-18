@@ -4,12 +4,18 @@ import { withAesDecrypt } from '@/lib/withAesDecrypt';
 import { getFlexTemplate, pushFlexMessage } from '@/utils/apiLineReply';
 import { replySafezoneBackMessage } from '@/utils/apiLineGroup';
 import moment from 'moment';
+import { nestedValueProblem } from '@/lib/inputTypes';
+import { fieldProblem, WATCH_LOCATION_RULES } from '@/lib/inputRules';
 
 export default withAesDecrypt(withRls(
-  req => Number(req.body?.uId),
+  // ASVS 2.2.1: ส่งค่าดิบให้ withRls ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1" "0x1" เป็นผู้ใช้ 1 ที่ด่านนี้)
+  req => req.body?.uId,
   async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
     if (req.method === 'PUT' || req.method === 'POST') {
       try {
+        // ASVS 1.2.4 2.2.2: ทุกช่องเป็นค่าเดี่ยวและตรงกฎ ตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+        const fieldError = nestedValueProblem(req.body) ?? fieldProblem(req.body, WATCH_LOCATION_RULES);
+        if (fieldError) return res.status(400).json({ message: 'error', data: fieldError });
         const { uId, takecare_id, distance, latitude, longitude, battery } = req.body;
 
         if (
@@ -81,7 +87,8 @@ export default withAesDecrypt(withRls(
         }
 
         if (previousStatus !== null && calculatedStatus === previousStatus) {
-          return res.status(200).json({ message: 'success', data: savedLocation });
+          // ASVS 15.3.1: ไม่คืนแถว location ทั้งแถว นาฬิกาอ่านแค่รหัสสถานะ (BackgroundService.kt response.code)
+          return res.status(200).json({ message: 'success' });
         }
 
         const user = await prisma.users.findFirst({ where: { users_id: Number(uId) } });
@@ -174,7 +181,7 @@ export default withAesDecrypt(withRls(
           }
         }
 
-        return res.status(200).json({ message: 'success', data: savedLocation });
+        return res.status(200).json({ message: 'success' }); // ASVS 15.3.1 (ดูด้านบน)
       } catch (error) {
         console.error('Error:', error);
         return res.status(500).json({ message: 'error', data: 'เกิดข้อผิดพลาดในการประมวลผล' });

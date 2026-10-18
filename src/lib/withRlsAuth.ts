@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import basePrisma from './prisma';
 import { verifyLineToken } from './verifyLineToken';
 import { decrypt } from '@/utils/helpers';
+import { positiveInt } from './inputTypes';
 
 type RlsPrisma = Prisma.TransactionClient | typeof basePrisma;
 
@@ -41,7 +42,8 @@ export function withRlsAuth(handler: Handler) {
                 } catch {}
             }
 
-            verifiedUserId = raw ? Number(raw) : null;
+            // ASVS 2.2.1: ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1" "0x1" เป็นผู้ใช้ 1 และ "Infinity" "1.5" "99999999999" ทำให้ HTTP 500)
+            verifiedUserId = positiveInt(raw);
         } else {
             // ทาง 2: LINE ID Token (สำหรับ LIFF)
             const auth = req.headers.authorization;
@@ -53,7 +55,8 @@ export function withRlsAuth(handler: Handler) {
             if (!lineId) {
                 return res.status(401).json({ message: 'Unauthorized: Invalid or expired token' });
             }
-            const user = await basePrisma.users.findFirst({ where: { users_line_id: lineId } });
+            // ASVS 7.4.2: บัญชีที่ถูกปิด (users_status_active ไม่ใช่ 1) ใช้ Token ต่อไม่ได้ ตรงกับ getUser/[id] ที่กรอง active อยู่แล้ว
+            const user = await basePrisma.users.findFirst({ where: { users_line_id: lineId, users_status_active: 1 } });
             if (!user) {
                 return res.status(401).json({ message: 'Unauthorized: User not registered' });
             }

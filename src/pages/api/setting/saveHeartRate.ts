@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRlsAuth } from '@/lib/withRlsAuth'
-import _ from 'lodash'
+import { nestedValueProblem } from '@/lib/inputTypes'
+import { fieldProblem, HEARTRATE_SETTING_RULES } from '@/lib/inputRules'
 
 type Data = {
     message: string;
@@ -13,14 +14,10 @@ export default withRlsAuth(
             try {
                 if (req.body) {
                     const body = req.body
-
-                    if (_.isNaN(Number(body.takecare_id)) || _.isNaN(Number(body.users_id))) {
-                        return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ takecare_id หรือ users_id ไม่ใช่ตัวเลข' })
-                    }
-
-                    if (body.id && _.isNaN(Number(body.id))) {
-                        return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ id ไม่ใช่ตัวเลข' })
-                    }
+                    // ASVS 1.2.4 2.2.2: ทุกช่องเป็นค่าเดี่ยวและตรงกฎ ตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+                    const fieldError = nestedValueProblem(body) ?? fieldProblem(body, HEARTRATE_SETTING_RULES)
+                    if (fieldError) return res.status(400).json({ message: 'error', data: fieldError })
+                    // รหัสทุกช่องตรวจแล้วด้วย HEARTRATE_SETTING_RULES (idRequired idOptional) จึงไม่ตรวจ Number() ซ้ำ
 
                     const min_bpm_default = 0
 

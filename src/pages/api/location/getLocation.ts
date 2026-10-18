@@ -1,24 +1,29 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRlsAuth } from '@/lib/withRlsAuth'
+import { positiveInt } from '@/lib/inputTypes'
 
 export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'GET') {
             try {
-                const { users_id, takecare_id } = req.query;
+                // ASVS 2.2.1: ตรวจรหัสด้วย positiveInt (เดิม isNaN(Number()) รับ "1e0" " 1")
+                const users_id = positiveInt(req.query.users_id);
+                const takecare_id = positiveInt(req.query.takecare_id);
 
-                if (!users_id || !takecare_id || isNaN(Number(users_id)) || isNaN(Number(takecare_id))) {
+                if (!users_id || !takecare_id) {
                     return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ไม่ถูกต้อง' });
                 }
 
                 const latestLocation = await prisma.location.findFirst({
                     where: {
-                        users_id: Number(users_id),
-                        takecare_id: Number(takecare_id),
+                        users_id,
+                        takecare_id,
                     },
                     orderBy: {
                         location_id: 'desc',
                     },
+                    // ASVS 15.3.1: ผู้เรียก (pages/location.tsx · utils/apiLineReply.ts replyLocation · utils/apiLineGroup.ts) อ่านแค่ 3 ช่องนี้
+                    select: { location_id: true, locat_latitude: true, locat_longitude: true },
                 });
 
                 if (!latestLocation) {

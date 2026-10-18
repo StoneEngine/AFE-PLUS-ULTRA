@@ -31,7 +31,8 @@ export function withLineUser(handler: Handler, isOwner: IsOwner) {
         if (!lineId) {
             return res.status(401).json({ message: 'Unauthorized: Invalid or expired token' });
         }
-        const user = await basePrisma.users.findFirst({ where: { users_line_id: lineId } });
+        // ASVS 7.4.2: บัญชีที่ถูกปิด (users_status_active ไม่ใช่ 1) ใช้ Token ต่อไม่ได้
+        const user = await basePrisma.users.findFirst({ where: { users_line_id: lineId, users_status_active: 1 } });
         if (!user) {
             return res.status(401).json({ message: 'Unauthorized: User not registered' });
         }

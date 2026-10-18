@@ -5,13 +5,13 @@ import axios from "axios";
 import prisma from '@/lib/prisma'
 import { decrypt } from '@/utils/helpers'
 import { withLineUser } from '@/lib/withLineUser'
+import { positiveInt } from '@/lib/inputTypes'
 
 // ถอด borrow_id จาก id ที่เข้ารหัส (ใช้ทั้งใน isOwner และ handle)
+// ASVS 2.2.1: ตรวจด้วย positiveInt (เดิม parseInt รับ "1abc" เป็น 1)
 function borrowIdFromReq(req: NextApiRequest): number | null {
     try {
-        const id = decrypt(req.query.id as string)
-        const v = Array.isArray(id) ? parseInt(id[0], 10) : parseInt(id as string, 10)
-        return isNaN(v) ? null : v
+        return positiveInt(decrypt(req.query.id as string))
     } catch {
         return null
     }
@@ -24,18 +24,17 @@ async function handle(req: NextApiRequest, res: NextApiResponse) {
         try {
             // const id = req.query.id
             console.log('req.query.id ', req.query.id )
-            const id = decrypt(req.query.id as string);
-            console.log("🚀 ~ handle ~ id:", id)
-            if(id){
-                const borrow_id = Array.isArray(id) ? parseInt(id[0], 10) : parseInt(id, 10);
-                if (!isNaN(borrow_id)) {
-                    const response = await prisma.borrowequipment.findFirst({
-                        where: {
-                            borrow_id: borrow_id
-                        }
-                    })
-                    return res.status(200).json({ message: 'success', data: response })
-                }
+            const borrow_id = borrowIdFromReq(req);
+            if (borrow_id) {
+                const response = await prisma.borrowequipment.findFirst({
+                    where: {
+                        borrow_id: borrow_id
+                    },
+                    // ASVS 15.3.1: ผู้เรียก (pages/questionnaire.tsx fetchData) ไม่อ่านช่องใดในคำตอบ เลือกแค่ borrow_id
+                    // (เดิมคืนทั้งแถว 22 ช่อง)
+                    select: { borrow_id: true },
+                })
+                return res.status(200).json({ message: 'success', data: response })
             }
             return res.status(400).json({ message: 'error', data: 'ไม่สามารถดึงข้อมูลได้' })
             

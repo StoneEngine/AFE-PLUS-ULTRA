@@ -19,6 +19,12 @@ export const getSessionService = async (token: string) => {
     }
 }
 
+// ASVS 7.4.1: ให้เซิร์ฟเวอร์ยกเลิก session ก่อนลบ Token บนเครื่อง
+export const logoutService = async (token: string) => {
+    const response = await axios.post('/api/auth/logout', undefined, headers(token));
+    return response.data;
+}
+
 export const checkTokenService = async (token: string) => {
     try {
         const response = await axios.post('/api/auth/check-session', { token },

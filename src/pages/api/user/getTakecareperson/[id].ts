@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRlsAuth } from '@/lib/withRlsAuth'
 import { decrypt } from '@/utils/helpers'
+import { positiveInt } from '@/lib/inputTypes'
 
 export default withRlsAuth(
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
@@ -11,8 +12,9 @@ export default withRlsAuth(
                     return res.status(400).json({ message: 'Invalid ID', data: null });
                 }
 
-                const takecarepersonId = Array.isArray(id) ? parseInt(id[0], 10) : parseInt(id, 10);
-                if (isNaN(takecarepersonId)) {
+                // ASVS 2.2.1: ตรวจด้วย positiveInt (เดิม parseInt รับ "1abc" เป็น 1)
+                const takecarepersonId = positiveInt(id);
+                if (!takecarepersonId) {
                     return res.status(400).json({ message: 'Invalid ID format', data: null });
                 }
 
@@ -24,14 +26,9 @@ export default withRlsAuth(
                         ],
                         takecare_status: 1,
                     },
-                    include: {
-                        gender_id_ref: {
-                            select: { gender_describe: true },
-                        },
-                        marry_id_ref: {
-                            select: { marry_describe: true },
-                        },
-                    },
+                    // ASVS 15.3.1: ผู้เรียกคนเดียว (lib/listAPI.ts getTakecareperson แล้ว lib/lineFunction.ts กับ utils/apiLineGroup.ts replyNotification)
+                    // อ่านแค่ 4 ช่องนี้ ไม่มีหน้าเว็บเรียก (เดิมคืนทั้งแถว 19 ช่อง + gender_describe + marry_describe)
+                    select: { takecare_id: true, takecare_fname: true, takecare_sname: true, takecare_tel1: true },
                 });
 
                 if (!response) {

@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRlsAuth } from '@/lib/withRlsAuth'
 import { decrypt } from '@/utils/helpers'
+import { nestedValueProblem, positiveInt } from '@/lib/inputTypes'
+import { fieldProblem, TAKECARE_RULES } from '@/lib/inputRules'
 
 type Data = {
     message: string;
@@ -14,7 +16,14 @@ export default withRlsAuth(
                 const id = decrypt(req.query.id as string);
                 if (req.body && id) {
                     const body = req.body
-                    const takecareId = parseInt(id, 10);
+                    const takecareId = positiveInt(id);
+                    if (!takecareId) return res.status(400).json({ message: 'error', data: 'รหัสผู้มีภาวะพึ่งพิงไม่ถูกต้อง' })
+                    // ASVS 1.2.4: ทุกช่องต้องเป็นค่าเดี่ยวก่อนส่งลง data ของ Prisma (src/lib/inputTypes.ts)
+                    const shape = nestedValueProblem(body)
+                    if (shape) return res.status(400).json({ message: 'error', data: shape })
+                    // ASVS 2.2.2: กฎของทุกช่องตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+                    const fieldError = fieldProblem(body, TAKECARE_RULES)
+                    if (fieldError) return res.status(400).json({ message: 'error', data: fieldError })
 
                     await prisma.takecareperson.update({
                         where: {
@@ -39,8 +48,10 @@ export default withRlsAuth(
                             takecare_drug: body.takecare_drug,
                         },
                     })
+                    return res.status(200).json({ message: 'success' })
                 }
-                return res.status(200).json({ message: 'success' })
+                // ASVS 2.1.1: body ว่างหรือ null (หรือ id ถอดรหัสไม่ได้) ตอบ 400 ตาม docs/INPUT-VALIDATION.md (เดิมตอบ 200 success โดยไม่บันทึก)
+                return res.status(400).json({ message: 'error', data: 'ไม่พบข้อมูล' })
             } catch (error) {
                 console.log("🚀 ~ file: create.ts:31 ~ handle ~ error:", error)
                 return res.status(400).json({ message: 'error', data: error })

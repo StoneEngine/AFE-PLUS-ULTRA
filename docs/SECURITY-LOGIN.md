@@ -23,6 +23,13 @@
 
 ## รหัสผ่าน (ASVS 6.2.8 · โค้ด `src/lib/passwordPolicy.ts`)
 - bcrypt ใช้แค่ 72 ไบต์แรก ระบบจึงไม่รับรหัสที่ยาวเกิน 72 ไบต์ หรือมีไบต์ 0 ทั้งตอนตั้งรหัส (`admin/addAdmin` `auth/resetPasswordAdmin`) และตอนเข้าสู่ระบบ รหัสที่รับจึงถูกตรวจครบทุกตัว ไม่ถูกตัดท้าย
+- ตอนตั้งหรือเปลี่ยนรหัสผ่าน (`admin/addAdmin` `auth/resetPasswordAdmin` `registration/create`) ไม่รับรหัสที่อยู่ในรายการรหัสผ่านที่คนใช้บ่อย 10,000 ตัว (`newPasswordProblem` · รายการ SecLists `src/lib/data/common-passwords.json`) ตาม ASVS 6.2.4 · ไม่ตรวจรายการนี้ตอนเข้าสู่ระบบ
+
+## Session ของเจ้าหน้าที่ (ASVS 7.2.4 7.4.1 7.4.2 · โค้ด `src/lib/authMiddleware.ts` `src/pages/api/auth/logout.ts`)
+- เข้าสู่ระบบสำเร็จ: สุ่มเลข session ใหม่ 256 บิต เก็บที่ `users.users_token` และใส่ใน JWT (`jti`) JWT ใบก่อนของบัญชีเดียวกันใช้ไม่ได้ทันที (เข้าสู่ระบบได้ทีละเครื่อง)
+- ทุกคำขอ: `authMiddleware` ตรวจลายเซ็น (HS256) วันหมดอายุ และตรวจกับฐานข้อมูลว่า `jti` ตรงกับเลขล่าสุด และบัญชียังเป็นเจ้าหน้าที่ที่เปิดใช้
+- ออกจากระบบ: หน้าเว็บเรียก `POST /api/auth/logout` เซิร์ฟเวอร์ล้าง `users_token` และส่ง `Clear-Site-Data`
+- เปลี่ยนสถานะผู้ใช้ (`admin/updateUserStatus`): ล้าง `users_token` ของคนนั้น session เดิมใช้ไม่ได้ทันที
 
 ## ที่มาของการออกแบบ
 - OWASP Authentication Cheat Sheet หัวข้อ Account Lockout แนะนำให้นับครั้งที่ผิดตามบัญชี ไม่ใช่ตาม IP และเตือนว่าการล็อกบัญชีอาจถูกใช้แกล้งให้คนอื่นเข้าไม่ได้

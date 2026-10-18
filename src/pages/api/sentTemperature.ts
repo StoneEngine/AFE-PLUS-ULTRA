@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withRls } from '@/lib/withRls';
 import { withAesDecrypt } from '@/lib/withAesDecrypt';
-import _ from 'lodash';
+import { nestedValueProblem } from '@/lib/inputTypes';
+import { fieldProblem, WATCH_TEMPERATURE_RULES } from '@/lib/inputRules';
 import { replyNotificationPostbackTemp } from '@/utils/apiLineReply';
 import moment from 'moment';
 
@@ -11,20 +12,22 @@ type Data = {
 };
 
 export default withAesDecrypt(withRls(
-    req => Number(req.body?.uId),
+    // ASVS 2.2.1: ส่งค่าดิบให้ withRls ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1" "0x1" เป็นผู้ใช้ 1 ที่ด่านนี้)
+    req => req.body?.uId,
     async function handle(req: NextApiRequest, res: NextApiResponse<Data>, prisma) {
         if (req.method === 'PUT' || req.method === 'POST') {
             try {
                 const body = req.body;
+                // ASVS 1.2.4 2.2.2: ทุกช่องเป็นค่าเดี่ยวและตรงกฎ ตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+                const fieldError = nestedValueProblem(body) ?? fieldProblem(body, WATCH_TEMPERATURE_RULES);
+                if (fieldError) return res.status(400).json({ message: 'error', data: fieldError });
 
                 if (!body.uId || !body.takecare_id || !body.temperature_value) {
                     return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ uId, takecare_id, temperature_value' });
                 }
 
-                if (_.isNaN(Number(body.uId)) || _.isNaN(Number(body.takecare_id)) || _.isNaN(Number(body.status))) {
-                    return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uId, takecare_id, status ไม่ใช่ตัวเลข' });
-                }
-
+                // ASVS 2.1.1: status ไม่บังคับตาม docs/INPUT-VALIDATION.md (ระบบคำนวณสถานะเอง) · uId takecare_id ตรวจแล้วด้วย WATCH_TEMPERATURE_RULES
+                // (เดิม _.isNaN(Number(body.status)) ทำให้ไม่ส่ง status ได้ 400)
                 const user = await prisma.users.findFirst({
                     where: { users_id: Number(body.uId) },
                     include: {

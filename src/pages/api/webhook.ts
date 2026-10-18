@@ -7,6 +7,7 @@ import { encrypt, parseQueryString } from '@/utils/helpers'
 import { postbackSafezone, postbackAccept, postbackClose } from '@/lib/lineFunction'
 import * as api from '@/lib/listAPI'
 import { withLineSignature } from '@/lib/withLineSignature'
+import { positiveInt } from '@/lib/inputTypes'
 
 type Data = {
   message: string;
@@ -212,7 +213,9 @@ if (events.type === "postback" && events.postback?.data) {
     await replyMapCoordinates({ toLineId: events.source.userId, extenId: postback.extenId || postback.exten_id, takecareId: postback.takecare_id || postback.takecareId });
   } else if (postback.type === 'safezone' || postback.type === 'alert') {
 	  console.log("Postback Triggered: ", postback);  // เช็คกรณี safezone หรือ alert
-	  const replyToken = await postbackSafezone({ userLineId: postback.userLineId, takecarepersonId: Number(postback.takecarepersonId) });
+	  // ASVS 2.2.1: takecarepersonId ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1") ไม่ใช่รหัส = ไม่ส่งคำขอ
+	  const takecarepersonId = positiveInt(postback.takecarepersonId);
+	  const replyToken = takecarepersonId ? await postbackSafezone({ userLineId: postback.userLineId, takecarepersonId }) : null;
 	  console.log("Reply Token for Safezone: ", replyToken);  // เช็ค replyToken
   
 	  if (replyToken) {
@@ -252,7 +255,13 @@ if (events.type === "postback" && events.postback?.data) {
       }
     } catch (error) {
       console.error("Error handling request: ", error);
-      return await replyMessage({ replyToken: req.body.events[0].replyToken, message: 'ระบบขัดข้องกรุณาลองใหม่อีกครั้ง' });
+      // ASVS 4.1.1: อ่าน replyToken แบบไม่ล้มซ้ำ (เดิม body ที่ไม่มี events โยน error อีกรอบใน catch ได้ 500 ไม่มี Content-Type)
+      // และตอบ res ทุกกรณี (เดิม return replyMessage() ไม่ตอบ res คำขอค้าง LINE ส่งซ้ำ)
+      const errorReplyToken = req.body?.events?.[0]?.replyToken;
+      if (errorReplyToken) {
+        await replyMessage({ replyToken: errorReplyToken, message: 'ระบบขัดข้องกรุณาลองใหม่อีกครั้ง' });
+      }
+      return res.status(200).json({ message: 'error' });
     }
     return res.status(200).json({ message: 'success' });
   } else {

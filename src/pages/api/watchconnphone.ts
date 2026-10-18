@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRls } from '@/lib/withRls'
-import _ from 'lodash'
+import { pinFormatProblem } from '@/lib/pinPolicy'
+import { positiveInt } from '@/lib/inputTypes'
 
 type Data = {
     message: string;
@@ -8,7 +9,8 @@ type Data = {
 }
 
 export default withRls(
-    req => Number(req.query?.uId),
+    // ASVS 2.2.1: ส่งค่าดิบให้ withRls ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1" "0x1" เป็นผู้ใช้ 1 ที่ด่านนี้)
+    req => req.query?.uId,
     async function handle(req: NextApiRequest, res: NextApiResponse, prisma) {
         if (req.method === 'GET') {
             try {
@@ -17,8 +19,14 @@ export default withRls(
                     return res.status(400).json({ message: 'error', data: 'ไม่พบพารามิเตอร์ uId หรือ uPin' })
                 }
 
-                if (_.isNaN(Number(query.uId)) || _.isNaN(Number(query.uPin))) {
-                    return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uId หรือ uPin ไม่ใช่ตัวเลข' })
+                // ASVS 2.2.1: uId ต้องเป็นจำนวนเต็มบวกแบบ allowlist (เดิม Number() รับ "0x1" "1e0" " 1" เป็นผู้ใช้ 1)
+                if (!positiveInt(query.uId)) {
+                    return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ uId ไม่ใช่ตัวเลข' })
+                }
+                // ASVS 2.2.2: ตรวจรูปแบบ PIN ที่เซิร์ฟเวอร์ (ตัวเลข 4 หลัก) ไม่พึ่งช่องกรอกของนาฬิกา — เดิมรับ "0x0" " 0" "0e5" ได้
+                const pinProblem = pinFormatProblem(query.uPin)
+                if (pinProblem) {
+                    return res.status(400).json({ message: 'error', data: pinProblem })
                 }
 
                 const user = await prisma.users.findFirst({

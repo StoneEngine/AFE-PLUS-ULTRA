@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { withRlsAuth } from '@/lib/withRlsAuth'
-import _ from 'lodash'
+import { nestedValueProblem } from '@/lib/inputTypes'
+import { fieldProblem, SAFEZONE_RULES } from '@/lib/inputRules'
 
 type Data = {
     message: string;
@@ -13,11 +14,17 @@ export default withRlsAuth(
             try {
                 if (req.body) {
                     const body = req.body
-                    if (_.isNaN(Number(body.takecare_id)) || _.isNaN(Number(body.users_id))) {
-                        return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ takecare_id หรือ users_id ไม่ใช่ตัวเลข' })
-                    }
-                    if (body.safezone_id && _.isNaN(Number(body.safezone_id))) {
-                        return res.status(400).json({ message: 'error', data: 'พารามิเตอร์ id ไม่ใช่ตัวเลข' })
+                    // ASVS 1.2.4: ทุกช่องต้องเป็นค่าเดี่ยวก่อนส่งลง data ของ Prisma (src/lib/inputTypes.ts)
+                    const shape = nestedValueProblem(body)
+                    if (shape) return res.status(400).json({ message: 'error', data: shape })
+                    // ASVS 2.2.2: กฎของทุกช่องตรวจที่เซิร์ฟเวอร์ (src/lib/inputRules.ts · docs/INPUT-VALIDATION.md)
+                    const fieldError = fieldProblem(body, SAFEZONE_RULES)
+                    if (fieldError) return res.status(400).json({ message: 'error', data: fieldError })
+                    // รหัสทุกช่องตรวจแล้วด้วย SAFEZONE_RULES (idRequired idOptional) จึงไม่ตรวจ Number() ซ้ำ
+                    // ASVS 2.2.1: รัศมีชั้น 1 ต้องไม่เกินชั้น 2 (ความสัมพันธ์ตามตรรกะ เหมือน RangeSlider ใน pages/setting.tsx)
+                    // เดิมรับ lv1 > lv2 ทำให้ sentlocation.ts คำนวณสถานะเขตปลอดภัยผิด
+                    if (Number(body.safez_radiuslv1) > Number(body.safez_radiuslv2)) {
+                        return res.status(400).json({ message: 'error', data: 'safez_radiuslv1 ต้องไม่มากกว่า safez_radiuslv2' })
                     }
                     if (body.safezone_id) {
                         await prisma.safezone.update({

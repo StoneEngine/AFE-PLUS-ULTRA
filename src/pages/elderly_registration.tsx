@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { GetServerSideProps } from 'next';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import Container from 'react-bootstrap/Container';
-
-import withCommonData from '@/lib/withCommonData';
 
 import styles from '@/styles/page.module.css'
 
@@ -680,11 +677,13 @@ const ElderlyRegistration = () => {
     )
 }
 
-export const getServerSideProps: GetServerSideProps = withCommonData({
+// ASVS 3.2.1: เลิกใช้ getServerSideProps (withCommonData) ที่ทำให้มี /_next/data/<buildId>/elderly_registration.json
+// ซึ่งเปิดตรงในเบราว์เซอร์ได้และไม่มี header กันแสดงผิดบริบท · ชื่อหน้าย้ายมาเป็นค่าคงที่ของหน้า (_app.tsx อ่าน Component.meta)
+ElderlyRegistration.meta = {
     title: 'ลงทะเบียนผู้มีภาวะพึ่งพิง',
     description: 'ลงทะเบียนผู้มีภาวะพึ่งพิง',
     slug: '',
     titleBar: 'ลงทะเบียนผู้มีภาวะพึ่งพิง'
-});
+} satisfies LayoutMetaProps;
 
 export default ElderlyRegistration

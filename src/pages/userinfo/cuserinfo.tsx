@@ -59,6 +59,7 @@ const Cuserinfo = () => {
         mode: "onChange",
         defaultValues: {
             users_pin: "",
+            old_pin: "",
             users_tel1: "",
             users_tel_home: "",
             users_postcode: ""
@@ -91,7 +92,9 @@ const Cuserinfo = () => {
                         reset({
                             users_fname: userData.users_fname,
                             users_sname: userData.users_sname,
-                            users_pin: String(userData.users_pin),
+                            // ASVS 6.2.3: ไม่ใส่ PIN ปัจจุบันลงช่อง ช่องว่าง = ไม่เปลี่ยน PIN
+                            users_pin: "",
+                            old_pin: "",
                             users_number: userData.users_number,
                             users_moo: userData.users_moo,
                             users_road: userData.users_road,
@@ -139,7 +142,9 @@ const Cuserinfo = () => {
             const data = {
                 users_fname   : formData.users_fname,
                 users_sname   : formData.users_sname,
-                users_pin     : Number(formData.users_pin),
+                // ส่งเป็นข้อความ ไม่แปลงเป็นตัวเลข เพื่อให้ PIN ที่ขึ้นต้นด้วย 0 ถึงเซิร์ฟเวอร์ครบ 4 หลัก · ว่าง = ไม่เปลี่ยน
+                users_pin     : formData.users_pin || undefined,
+                old_pin       : formData.users_pin ? formData.old_pin : undefined,
                 users_number  : formData.users_number,
                 users_moo     : formData.users_moo,
                 users_road    : formData.users_road,
@@ -165,7 +170,10 @@ const Cuserinfo = () => {
 
         } catch (error) {
             console.error('Error in handleSubmit:', error);
-            setAlert({ show: true, message: 'ไม่สามารถบันทึกข้อมูลได้', showClose: true, autoCloseMs: undefined, messageClassName: undefined })
+            // แสดงเหตุที่เซิร์ฟเวอร์ปฏิเสธ (เช่น PIN เดิมไม่ถูกต้อง หรือ PIN เดาง่าย) ถ้ามี
+            const serverMessage = axios.isAxiosError(error) && typeof error.response?.data?.data === 'string' ? error.response.data.data : '';
+            setAlert({ show: true, message: serverMessage || 'ไม่สามารถบันทึกข้อมูลได้', showClose: true, autoCloseMs: undefined, messageClassName: undefined })
+            throw error;
         }
     };
 
@@ -240,17 +248,28 @@ const Cuserinfo = () => {
                         required
                     />
 
-                    <InputLabel 
-                        label="Pin 4 หลัก" 
-                        id="users_pin" 
-                        placeholder="กรอก Pin 4 หลัก" 
-                        type="tel" 
+                    <InputLabel
+                        label="Pin ใหม่ 4 หลัก (เว้นว่างถ้าไม่เปลี่ยน)"
+                        id="users_pin"
+                        placeholder="กรอก Pin ใหม่ 4 หลัก"
+                        type="tel"
                         max={4}
                         {...register("users_pin")}
                         isInvalid={!!errors.users_pin}
                         errorMessage={errors.users_pin?.message}
                         isValid={isFieldValid("users_pin")}
-                        required
+                    />
+
+                    <InputLabel
+                        label="Pin เดิม (กรอกเมื่อเปลี่ยน Pin)"
+                        id="old_pin"
+                        placeholder="กรอก Pin เดิม 4 หลัก"
+                        type="tel"
+                        max={4}
+                        {...register("old_pin")}
+                        isInvalid={!!errors.old_pin}
+                        errorMessage={errors.old_pin?.message}
+                        isValid={isFieldValid("old_pin")}
                     />
 
                     <InputLabel 

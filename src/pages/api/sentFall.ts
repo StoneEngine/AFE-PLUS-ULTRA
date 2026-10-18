@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withRls } from '@/lib/withRls';
 import { withAesDecrypt } from '@/lib/withAesDecrypt';
-import _ from 'lodash';
+import { nestedValueProblem } from '@/lib/inputTypes';
+import { fieldProblem, WATCH_FALL_RULES } from '@/lib/inputRules';
 import { replyNotificationPostback, replyNotificationPostbackfall } from '@/utils/apiLineReply';
 import axios from 'axios';
 import moment from 'moment';
@@ -18,11 +19,15 @@ type Data = {
 };
 
 export default withAesDecrypt(withRls(
-    req => Number(req.body?.users_id),
+    // ASVS 2.2.1: ส่งค่าดิบให้ withRls ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1" "0x1" เป็นผู้ใช้ 1 ที่ด่านนี้)
+    req => req.body?.users_id,
     async function handle(req: NextApiRequest, res: NextApiResponse<Data>, prisma) {
         if (req.method === 'PUT' || req.method === 'POST') {
             try {
                 const body = req.body;
+                // ASVS 1.2.4: ทุกช่องต้องเป็นค่าเดี่ยวก่อนส่งลง data ของ Prisma (src/lib/inputTypes.ts)
+                const shape = nestedValueProblem(body) ?? fieldProblem(body, WATCH_FALL_RULES); // + ASVS 2.2.2 (src/lib/inputRules.ts)
+                if (shape) return res.status(400).json({ message: 'error', data: shape });
 
                 if (
                     body.users_id === undefined || body.users_id === null ||
@@ -35,14 +40,6 @@ export default withAesDecrypt(withRls(
                     body.longitude === undefined
                 ) {
                     return res.status(400).json({ message: 'error', data: 'Missing parameter: users_id, takecare_id, x_axis, y_axis, z_axis, fall_status, latitude, longitude' });
-                }
-
-                if (
-                    _.isNaN(Number(body.users_id)) ||
-                    _.isNaN(Number(body.takecare_id)) ||
-                    _.isNaN(Number(body.fall_status))
-                ) {
-                    return res.status(400).json({ message: 'error', data: 'users_id, takecare_id, fall_status ต้องเป็นตัวเลข' });
                 }
 
                 const user = await prisma.users.findFirst({

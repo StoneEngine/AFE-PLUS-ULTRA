@@ -30,11 +30,15 @@ async function verifySignatureLocally(idToken: string): Promise<boolean> {
     if (!ALLOWED_ALGS.includes(alg as jwt.Algorithm) || !kid) return false;
     const key = await lineKey(kid);
     if (!key) return false;
-    jwt.verify(idToken, key, {
+    const payload = jwt.verify(idToken, key, {
         algorithms: ALLOWED_ALGS,
         issuer: LINE_ISSUER,
         audience: process.env.LINE_LOGIN_CHANNEL_ID || '',
-    });
+    }) as jwt.JwtPayload;
+    // ASVS 7.4.1: หน้าเว็บสั่ง liff.logout() เมื่อ Token เหลืออายุไม่ถึง 1 นาที (initLiffForWeb ใน liffAxios.ts)
+    // เซิร์ฟเวอร์จึงไม่รับ Token ช่วงนั้นด้วย Token ที่หน้าเว็บออกจากระบบไปแล้วจะใช้ต่อไม่ได้
+    // (เกณฑ์ 1 นาทีเป็นการออกแบบของผู้วิจัยให้ตรงกับหน้าเว็บ ไม่มีเอกสารกำหนดตัวเลขนี้)
+    if (!payload.exp || payload.exp * 1000 < Date.now() + 60_000) return false;
     return true;
 }
 

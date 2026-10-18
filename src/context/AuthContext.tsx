@@ -2,12 +2,22 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 import { useRouter } from 'next/router';
 
 import { handleAxiosError } from '@/lib/service/helpFunction';
-import { loginService, getSessionService } from '@/lib/service/auth';
+import { loginService, getSessionService, logoutService } from '@/lib/service/auth';
 
 import { useDispatch } from 'react-redux';
 import { setDataUser, removeDataUser } from '@/redux/features/user';
 import { AppDispatch } from '@/redux/store';
 import Cookies from 'js-cookie';
+
+// ASVS 3.3.1: cookie ต้องมี Secure และชื่อขึ้นต้นด้วย __Host- (เดิมชื่อ currentUser ไม่มี Secure)
+// __Host- บังคับ Secure + path=/ + ไม่ระบุ Domain · ทำตาม OWASP CSRF Prevention Cheat Sheet หัวข้อ
+// Using Cookies with Host Prefixes to Identify Origins (ใช้ __Host- คู่กับ SameSite)
+const USER_COOKIE = '__Host-currentUser';
+const USER_COOKIE_OPTIONS = { secure: true, sameSite: 'strict' as const, path: '/' };
+const setUserCookie = (user: unknown) => {
+    Cookies.remove('currentUser'); // ลบ cookie ชื่อเดิมที่ยังค้างในเบราว์เซอร์
+    Cookies.set(USER_COOKIE, JSON.stringify(user), USER_COOKIE_OPTIONS);
+};
 
 interface AuthContextProps {
     token: string | null;
@@ -50,7 +60,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     accessToken = response?.accessToken;
                 }
                 dispatch(setDataUser({...response?.user, accessToken}));
-                Cookies.set('currentUser', JSON.stringify(response?.user));
+                setUserCookie(response?.user);
             }else{
                 logout();
             }
@@ -70,7 +80,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
                
                 dispatch(setDataUser({...response?.user, accessToken: response?.accessToken}));
-                Cookies.set('currentUser', JSON.stringify(response?.user))
+                setUserCookie(response?.user)
             }
             router.push('/admin/dashboard');
         } catch (error) {
@@ -80,10 +90,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = () => {
+        // ASVS 7.4.1: แจ้งเซิร์ฟเวอร์ให้ยกเลิก session ก่อน (ถ้า Token ใช้ไม่ได้แล้วจะได้ 401 ซึ่งไม่เป็นไร)
+        const storedToken = localStorage.getItem('token');
+        if (storedToken) logoutService(storedToken).catch(() => {});
         setToken(null);
         localStorage.removeItem('token');
         dispatch(removeDataUser());
         Cookies.remove('currentUser');
+        Cookies.remove(USER_COOKIE, USER_COOKIE_OPTIONS);
         router.push('/admin/login');
     };
 // console.log('isAuthenticated', isAuthenticated)

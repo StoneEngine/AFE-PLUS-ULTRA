@@ -1,10 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { withLineUser } from '@/lib/withLineUser';
+import { positiveIntList } from '@/lib/inputTypes';
+import { canReturn } from '@/lib/borrowWorkflow';
 
 // คืนได้เฉพาะรายการที่ตัวเองยืม — ทุก borrow_equipment_id ใน returnList ต้องอยู่ในการยืมของคนที่ล็อกอิน
 export default withLineUser(handle, async (req, usersId) => {
-    const ids: number[] = Array.isArray(req.body?.returnList) ? req.body.returnList.map(Number) : [];
+    const ids = positiveIntList(req.body?.returnList) ?? [];
     if (ids.length === 0) return true; // handler ตอบ 400 เอง
     const owned = await prisma.borrowequipment_list.count({
         where: { borrow_equipment_id: { in: ids }, borrow_id_ref: { borrow_user_id: usersId } },
@@ -15,10 +17,22 @@ export default withLineUser(handle, async (req, usersId) => {
 async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'POST') {
         try {
-            const { returnList } = req.body; // รับรายการอุปกรณ์ที่ต้องการคืน (array ของ borrow_equipment_id)
+            // รับรายการอุปกรณ์ที่ต้องการคืน (array ของ borrow_equipment_id)
+            // ASVS 1.2.4: ต้องเป็นรายการจำนวนเต็มบวก ก่อนใส่ลง in: ของ Prisma (src/lib/inputTypes.ts)
+            const returnList = positiveIntList(req.body?.returnList);
 
-            if (!returnList || returnList.length === 0) {
+            if (!returnList) {
                 return res.status(400).json({ message: 'ไม่มีรายการอุปกรณ์ที่ต้องคืน' });
+            }
+
+            // ASVS 2.3.1: คืนได้เมื่อการยืมได้รับอนุมัติ ส่งแบบสอบถามแล้ว และยังไม่ปิดการคืน (src/lib/borrowWorkflow.ts)
+            const borrows = await prisma.borrowequipment.findMany({
+                where: { borrowequipment_list: { some: { borrow_equipment_id: { in: returnList } } } },
+                select: { borrow_equipment_status: true, borrow_send_status: true, borrow_status: true },
+            });
+            const outOfOrder = borrows.map(canReturn).find((problem) => problem);
+            if (borrows.length === 0 || outOfOrder) {
+                return res.status(409).json({ message: outOfOrder || 'ไม่พบรายการยืม' });
             }
 
             // ดึงรายการ equipment_id ที่เกี่ยวข้องกับ borrow_equipment_id ที่คืน

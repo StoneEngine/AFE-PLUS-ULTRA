@@ -6,6 +6,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
     if (req.method === 'GET') {
         try {
             const { name } = req.query;
+            // ASVS 2.2.1: name ต้องเป็นข้อความตัวเดียว ส่งซ้ำ (?name=a&name=b) ได้ array ที่ contains ของ Prisma ไม่รับ (เดิมล้มไปที่ catch ได้ HTTP 401)
+            if (name !== undefined && typeof name !== 'string') {
+                return res.status(400).json({ message: 'name ต้องเป็นข้อความ' });
+            }
             const user = await prisma.users.findMany({
                 where: {
                     NOT: {
@@ -24,6 +28,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
                         }
                     ]
                 },
+                // ASVS 15.3.1: ผู้เรียก (pages/admin/user_management.tsx ผ่าน lib/service/userManagement.ts) อ่านแค่ 6 ช่องนี้ ไม่อ่าน status_id (เดิม 7 ช่อง)
                 select:{
                     users_id:true,
                     users_fname: true,
@@ -34,7 +39,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
                         }
                     },
                     users_status_onweb: true,
-                    status_id: true,
                     users_status_active: true
                 }
             })

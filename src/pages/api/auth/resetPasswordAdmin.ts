@@ -4,7 +4,8 @@ import prisma from '@/lib/prisma'
 // import { matchPassword } from '@/utils/helpers'
 import { compare, genSalt, hash } from 'bcrypt';
 import authMiddleware from '@/lib/authMiddleware';
-import { passwordProblem } from '@/lib/passwordPolicy';
+import { newPasswordProblem } from '@/lib/passwordPolicy';
+import { positiveInt } from '@/lib/inputTypes';
 
 const SECRET_KEY = process.env.SECRET_KEY;
 
@@ -15,11 +16,16 @@ if (!SECRET_KEY) {
 
 const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
     if (req.method === 'POST') {
-        const { user_id, old_password, new_password } = req.body;
-        if (!user_id || !old_password || !new_password) {
+        const { user_id: rawUserId, old_password, new_password } = req.body ?? {}; // ASVS 4.1.1: body null ไม่ทำให้ล้มเป็น HTTP 500 ที่ไม่มี Content-Type
+        if (!rawUserId || !old_password || !new_password) {
             return res.status(401).json({ message: 'พารามิเตอร์ไม่ครบ' });
         }
-        const problem = passwordProblem(new_password); // ASVS 6.2.8
+        // ASVS 1.2.4: ตรวจชนิดก่อนส่งให้ Prisma (src/lib/inputTypes.ts)
+        const user_id = positiveInt(rawUserId);
+        if (!user_id || typeof old_password !== 'string') {
+            return res.status(400).json({ message: 'ข้อมูลไม่ถูกต้อง' });
+        }
+        const problem = newPasswordProblem(new_password); // ASVS 6.2.8 6.2.4
         if (problem) return res.status(400).json({ message: problem });
         try {
             

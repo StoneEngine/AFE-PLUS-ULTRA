@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { verifyLineToken } from './verifyLineToken';
+import basePrisma from './prisma';
 
 type Handler = (req: NextApiRequest, res: NextApiResponse) => Promise<any> | any;
 
@@ -34,6 +35,15 @@ export function withLineOwner(
         }
         if (lineId !== getLineId(req)) {
             return res.status(403).json({ message: 'Forbidden: ขอได้เฉพาะข้อมูลของตัวเอง' });
+        }
+        // ASVS 7.4.2: ถ้า LINE user ID นี้มีบัญชีที่ถูกปิด (users_status_active ไม่ใช่ 1) ใช้ Token ต่อไม่ได้
+        // คนที่ยังไม่ลงทะเบียน (ไม่มีแถว) ยังผ่านได้ตามเดิม เพราะหน้า registration ต้องใช้
+        const closed = await basePrisma.users.findFirst({
+            where: { users_line_id: lineId, NOT: { users_status_active: 1 } },
+            select: { users_id: true },
+        });
+        if (closed) {
+            return res.status(401).json({ message: 'Unauthorized: บัญชีถูกปิดใช้งาน' });
         }
         return handler(req, res);
     };

@@ -16,6 +16,7 @@ import {
 } from "@/utils/apiLineReply";
 import { encrypt, parseQueryString } from "@/utils/helpers";
 import { withLineSignature } from "@/lib/withLineSignature";
+import { positiveInt } from "@/lib/inputTypes";
 import {
     postbackSafezone,
     postbackAccept,
@@ -470,13 +471,15 @@ async function handle(
                 if (events.type === "postback" && events.postback?.data) {
                     const postback = parseQueryString(events.postback.data);
                     console.log("Received postback data:", postback);
+                    // ASVS 2.2.1: takecarepersonId ตรวจด้วย positiveInt (เดิม Number() รับ "1e0" " 1") ไม่ใช่รหัส = ไม่ส่งคำขอ ตอบว่าส่งไม่ได้
+                    const takecarepersonId = positiveInt(postback.takecarepersonId);
 
                     if (postback.type === "safezone") {
                         console.log("Handling safezone postback data.");
-                        const userPushId = await postbackSafezone({
+                        const userPushId = takecarepersonId ? await postbackSafezone({
                             userLineId: postback.userLineId,
-                            takecarepersonId: Number(postback.takecarepersonId),
-                        });
+                            takecarepersonId,
+                        }) : null;
                         if (userPushId) {
                             console.log(
                                 "Safezone request sent, replying with notification."
@@ -495,10 +498,10 @@ async function handle(
                         }
                     } else if (postback.type === "temperature") {
                         console.log("Handling temperature postback data.");
-                        const userPushId = await postbackTemp({
+                        const userPushId = takecarepersonId ? await postbackTemp({
                             userLineId: postback.userLineId,
-                            takecarepersonId: Number(postback.takecarepersonId),
-                        });
+                            takecarepersonId,
+                        }) : null;
 
                         if (userPushId) {
                             console.log(
@@ -526,10 +529,10 @@ async function handle(
                     // ---- เพิ่มส่วนนี้เข้าไป ----
                     else if (postback.type === "fall") {
                         console.log("Handling fall postback data.");
-                        const userPushId = await postbackFall({
+                        const userPushId = takecarepersonId ? await postbackFall({
                             userLineId: postback.userLineId,
-                            takecarepersonId: Number(postback.takecarepersonId),
-                        });
+                            takecarepersonId,
+                        }) : null;
                         if (userPushId) {
                             console.log(
                                 "Fall request sent, replying with notification."
@@ -548,10 +551,10 @@ async function handle(
                         }
                     } else if (postback.type === "heartrate") {
                         console.log("Handling heart rate postback data.");
-                        const userPushId = await postbackHeartRate({
+                        const userPushId = takecarepersonId ? await postbackHeartRate({
                             userLineId: postback.userLineId,
-                            takecarepersonId: Number(postback.takecarepersonId),
-                        });
+                            takecarepersonId,
+                        }) : null;
 
                         if (userPushId) {
                             console.log(
@@ -606,10 +609,16 @@ async function handle(
             }
         } catch (error) {
             console.error("Error occurred:", error); // แสดงข้อผิดพลาด
-            return await replyMessage({
-                replyToken: req.body.events[0].replyToken,
-                message: "ระบบขัดข้องกรุณาลองใหม่อีกครั้ง",
-            });
+            // ASVS 4.1.1: อ่าน replyToken แบบไม่ล้มซ้ำ (เดิม body ที่ไม่มี events โยน error อีกรอบใน catch ได้ 500 ไม่มี Content-Type)
+            // และตอบ res ทุกกรณี (เดิม return replyMessage() ไม่ตอบ res คำขอค้าง LINE ส่งซ้ำ)
+            const errorReplyToken = req.body?.events?.[0]?.replyToken;
+            if (errorReplyToken) {
+                await replyMessage({
+                    replyToken: errorReplyToken,
+                    message: "ระบบขัดข้องกรุณาลองใหม่อีกครั้ง",
+                });
+            }
+            return res.status(200).json({ message: "error" });
         }
         return res.status(200).json({ message: "success" });
     } else {

@@ -13,7 +13,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse ) => {
                         lte: new Date(`${moment().year()}-12-31`),
                         gte: new Date(`${moment().year()}-01-01`)
                     }
-                }
+                },
+                // ASVS 15.3.1: ผู้เรียก (pages/admin/additional_help.tsx ผ่าน lib/service/additionalHelp.ts) อ่านแค่ 2 ช่องนี้เพื่อนับรายเดือน (เดิมคืนทั้งแถว 10 ช่อง)
+                select: { exten_date: true, exted_closed_date: true },
             })
             let items:any = extendedhelp;
             return res.status(200).json({ message: 'Success', data:items});

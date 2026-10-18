@@ -44,12 +44,14 @@ export const userEditSchema = z.object({
     required_error: "กรุณากรอกนามสกุล",
   }).min(1, "กรุณากรอกนามสกุล"),
   
-  users_pin: z.string({
-    required_error: "กรุณากรอก PIN",
-  })
-    .min(1, "กรุณากรอก PIN")
-    .length(4, "PIN ต้องมี 4 หลัก")
-    .regex(/^[0-9]+$/, "ต้องเป็นตัวเลขเท่านั้น"),
+  // ASVS 6.2.3: เว้นว่าง = ไม่เปลี่ยน PIN · ถ้าจะเปลี่ยนต้องกรอก PIN เดิมด้วย (เซิร์ฟเวอร์ตรวจซ้ำที่ updateUser)
+  users_pin: z.string()
+    .refine((val) => val === "" || val.length === 4, "PIN ต้องมี 4 หลัก")
+    .refine((val) => val === "" || /^[0-9]+$/.test(val), "ต้องเป็นตัวเลขเท่านั้น"),
+
+  old_pin: z.string()
+    .refine((val) => val === "" || val.length === 4, "PIN ต้องมี 4 หลัก")
+    .refine((val) => val === "" || /^[0-9]+$/.test(val), "ต้องเป็นตัวเลขเท่านั้น"),
 
   users_number: z.string().optional(),
   users_moo: optionalDigitsRule,
@@ -70,6 +72,9 @@ export const userEditSchema = z.object({
   users_postcode: zipCodeRule, 
   users_tel1: phoneRule,
   users_tel_home: homePhoneRule,
+}).refine((val) => val.users_pin === "" || val.old_pin !== "", {
+  message: "กรุณากรอก PIN เดิมก่อนเปลี่ยน PIN",
+  path: ["old_pin"],
 });
 
 // 3. Export Type
